@@ -1,5 +1,5 @@
 {
-  "name": "app-adso",
+  "name": "JUSTROOM",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "axios": "^1.7.7",
     "element-plus": "^2.8.6",
     "vue": "^3.4.37",
     "vue-router": "^4.4.5"
