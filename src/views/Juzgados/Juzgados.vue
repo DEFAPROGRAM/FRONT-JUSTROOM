@@ -13,7 +13,7 @@
       >
         <Formulario :titulo="'Formulario de Juzgados'">
           <template #slotForm>
-            <formJuzgados 
+            <FormJuzgados 
               :initialData="currentJuzgado" 
               :sedes="sedes" 
               @submit="handleSubmit" 
@@ -23,9 +23,9 @@
         </Formulario>
       </el-dialog>
       
-      <el-table :data="juzgados" style="width: 100%" v-loading="loading">
+      <el-table :data="juzgadosConSedes" style="width: 100%" v-loading="loading">
         <el-table-column prop="nom_juzgado" label="Juzgado" />
-        <el-table-column prop="nom_sede" label="Sede" /> <!-- Nueva columna para la Sede -->
+        <el-table-column prop="nom_sede" label="Sede" />
         <el-table-column label="Acciones" width="200">
           <template #default="scope">
             <el-button type="primary" :icon="Edit" @click="editJuzgado(scope.row)" />
@@ -38,37 +38,48 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import LayoutMain from '../../components/LayoutMain.vue'
-import formJuzgados from './components/formJuzgados.vue'
 import Formulario from '../../components/Formulario.vue'
+import FormJuzgados from './components/FormJuzgados.vue'
 import Header from '../../components/Header.vue'
 import { Delete, Edit } from "@element-plus/icons-vue"
 import { ElMessageBox, ElMessage } from 'element-plus'
 import axios from 'axios'
 
-interface Juzgado {
-  id_juzgado?: number;  // Hacer opcional id_juzgado
+interface FormData {
   nom_juzgado: string;
-  id_sede?: number; // Agregar el id_sede para la relación
-  nom_sede?: string; // Agregar el nombre de la sede
+  id_sede?: number;
+}
+
+interface Juzgado extends FormData {
+  id_juzgado: number;
+}
+
+interface Sede {
+  id_sede: number;
+  nom_sede: string;
 }
 
 const dialogVisible = ref(false)
 const juzgados = ref<Juzgado[]>([])
-const sedes = ref<{ id_sede: number; nom_sede: string }[]>([]) // Lista de sedes
+const sedes = ref<Sede[]>([])
 const formMode = ref<'create' | 'edit'>('create')
-const currentJuzgado = ref<Juzgado | null>(null)
+const currentJuzgado = ref<Juzgado>({ id_juzgado: 0, nom_juzgado: '', id_sede: undefined })
 const loading = ref(false)
+
+const juzgadosConSedes = computed(() => {
+  return juzgados.value.map(juzgado => ({
+    ...juzgado,
+    nom_sede: sedes.value.find(sede => sede.id_sede === juzgado.id_sede)?.nom_sede || 'Sede no encontrada'
+  }))
+})
 
 const loadJuzgados = async () => {
   loading.value = true
   try {
     const response = await axios.get('http://127.0.0.1:8000/api/juzgados')
-    juzgados.value = response.data.map((juzgado: Juzgado) => ({
-      ...juzgado,
-      nom_sede: sedes.value.find(sede => sede.id_sede === juzgado.id_sede)?.nom_sede // Mapeamos el nombre de la sede
-    }))
+    juzgados.value = response.data
   } catch (error) {
     console.error('Error al cargar los Juzgados:', error)
     ElMessage.error('Ocurrió un error al cargar los Juzgados')
@@ -77,7 +88,6 @@ const loadJuzgados = async () => {
   }
 }
 
-// Nueva función para cargar las sedes
 const loadSedes = async () => {
   try {
     const response = await axios.get('http://127.0.0.1:8000/api/sedes')
@@ -90,30 +100,30 @@ const loadSedes = async () => {
 
 const showForm = () => {
   formMode.value = 'create'
-  currentJuzgado.value = { nom_juzgado: '', id_sede: undefined } // iniciar con campos vacíos
+  currentJuzgado.value = { id_juzgado: 0, nom_juzgado: '', id_sede: undefined }
   dialogVisible.value = true
 }
 
-const handleSubmit = async (formData: Juzgado) => {
+const handleSubmit = async (formData: FormData) => {
   try {
     if (formMode.value === 'create') {
       await axios.post('http://127.0.0.1:8000/api/juzgados', formData)
       ElMessage.success('Juzgado creado con éxito')
     } else {
-      await axios.put(`http://127.0.0.1:8000/api/juzgados/${formData.id_juzgado}`, formData)
+      await axios.put(`http://127.0.0.1:8000/api/juzgados/${currentJuzgado.value.id_juzgado}`, formData)
       ElMessage.success('Juzgado actualizado con éxito')
     }
     dialogVisible.value = false
-    await loadJuzgados()  // Refresca la lista de juzgados
+    await loadJuzgados()
   } catch (error) {
-    console.error('Error al procesar el Juzgado:', error)
+    console.error('Error al procesar los Juzgados:', error)
     ElMessage.error('Ocurrió un error al procesar el Juzgado')
   }
 }
 
 const editJuzgado = (juzgado: Juzgado) => {
   formMode.value = 'edit'
-  currentJuzgado.value = { ...juzgado }  // Copia los datos del juzgado a editar
+  currentJuzgado.value = { ...juzgado }
   dialogVisible.value = true
 }
 
@@ -130,7 +140,7 @@ const deleteJuzgado = (juzgado: Juzgado) => {
     try {
       await axios.delete(`http://127.0.0.1:8000/api/juzgados/${juzgado.id_juzgado}`)
       ElMessage.success('Juzgado eliminado con éxito')
-      await loadJuzgados()  // Refresca la lista de Juzgados
+      await loadJuzgados()
     } catch (error) {
       console.error('Error al eliminar el Juzgado:', error)
       ElMessage.error('Ocurrió un error al eliminar el Juzgado')
@@ -140,9 +150,9 @@ const deleteJuzgado = (juzgado: Juzgado) => {
   })
 }
 
-onMounted(() => {
-  loadJuzgados()  // Cargar juzgados al iniciar
-  loadSedes()  // Cargar sedes al iniciar
+onMounted(async () => {
+  await loadSedes()
+  await loadJuzgados()
 })
 </script>
 
