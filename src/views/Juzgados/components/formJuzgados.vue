@@ -1,7 +1,7 @@
 <template>
   <el-form :model="formData" ref="formRef" label-width="120px">
     <el-form-item 
-      label="Nombre del Juzgado" 
+      label="Juzgado" 
       prop="nom_juzgado" 
       :rules="[{ required: true, message: 'Por favor ingresa el nombre del juzgado', trigger: 'blur' }]">
       <el-input v-model="formData.nom_juzgado" />
