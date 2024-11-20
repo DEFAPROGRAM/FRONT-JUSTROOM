@@ -19,23 +19,49 @@
         <el-option label="Cancelada" value="cancelada"></el-option>
       </el-select>
     </el-form-item>
-    <el-form-item label="Sala" prop="id_sala">
-      <el-select v-model="form.id_sala" placeholder="Seleccione la sala">
-        <el-option v-for="sala in salas" :key="sala.id_sala" :label="sala.nom_sala" :value="sala.id_sala"></el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="Juzgado" prop="id_juzgado">
-      <el-select v-model="form.id_juzgado" placeholder="Seleccione el juzgado">
-        <el-option v-for="juzgado in juzgados" :key="juzgado.id_juzgado" :label="juzgado.nom_juzgado" :value="juzgado.id_juzgado"></el-option>
-      </el-select>
-    </el-form-item>
     <el-form-item label="Usuario" prop="id_usuario">
-      <el-select v-model="form.id_usuario" placeholder="Seleccione el usuario">
+      <el-select 
+        v-model="form.id_usuario" 
+        placeholder="Seleccione el usuario" 
+        @change="onUserChange(form.id_usuario)">
         <el-option 
           v-for="usuario in users" 
           :key="usuario.id" 
           :label="`${usuario.nombres} ${usuario.apellidos}`" 
           :value="usuario.id">
+        </el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="Sede" prop="id_sede">
+      <el-select 
+        v-model="form.id_sede" 
+        placeholder="Seleccione la sede" 
+        :disabled="!form.id_juzgado">
+        <el-option 
+          v-for="sede in sedes" 
+          :key="sede.id_sede" 
+          :label="sede.nom_sede" 
+          :value="sede.id_sede">
+        </el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="Juzgado" prop="id_juzgado">
+      <el-select v-model="form.id_juzgado" placeholder="Seleccione el juzgado" :disabled="!form.id_usuario">
+        <el-option 
+          v-for="juzgado in juzgados" 
+          :key="juzgado.id_juzgado" 
+          :label="juzgado.nom_juzgado" 
+          :value="juzgado.id_juzgado">
+        </el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="Sala" prop="id_sala">
+      <el-select v-model="form.id_sala" placeholder="Seleccione la sala" :disabled="!form.id_sede">
+        <el-option 
+          v-for="sala in filteredSalas" 
+          :key="sala.id_sala" 
+          :label="sala.nom_sala" 
+          :value="sala.id_sala">
         </el-option>
       </el-select>
     </el-form-item>
@@ -46,147 +72,170 @@
   </el-form>
 </template>
 
-<script setup lang="ts">
-import { reactive, ref, watch, onMounted } from 'vue';
-import type { FormInstance, FormRules } from 'element-plus';
+<script>
+import { reactive, ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 
-interface Reserva {
-  id_reserva?: number;
-  descripcion: string;
-  fecha: string;
-  hora_inicio: string;
-  hora_fin: string;
-  estado: string;
-  id_sala: number;
-  id_juzgado: number;
-  id_usuario: number;
-}
+export default {
+  props: {
+    initialData: {
+      type: Object,
+      default: () => null,
+    },
+    formMode: {
+      type: String,
+      required: true,
+    },
+    users: {
+      type: Array,
+      required: true,
+    },
+  },
+  setup(props) {
+    const form = reactive({
+      descripcion: '',
+      fecha: '',
+      hora_inicio: '',
+      hora_fin: '',
+      estado: 'pendiente',
+      id_sala: null,
+      id_juzgado: null,
+      id_usuario: null,
+      id_sede: null,
+    });
 
-interface Sala {
-  id_sala: number;
-  nom_sala: string;
-}
+    const salas = ref([]);
+    const juzgados = ref([]);
+    const sedes = ref([]);
+    const loading = ref(false);
+    const rules = {
+      descripcion: [
+        { required: true, message: 'Por favor ingrese una descripción', trigger: 'blur' }
+      ],
+      fecha: [
+        { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' }
+      ],
+      hora_inicio: [
+        { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' }
+      ],
+      hora_fin: [
+        { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' }
+      ],
+      estado: [
+        { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
+      ],
+      id_sede: [
+        { required: true, message: 'Por favor seleccione una sede', trigger: 'change' }
+      ],
+      id_juzgado: [
+        { required: true, message: 'Por favor seleccione un juzgado', trigger: 'change' }
+      ],
+      id_usuario: [
+        { required: true, message: 'Por favor seleccione un usuario', trigger: 'change' }
+      ],
+      id_sala: [
+        { required: true, message: 'Por favor seleccione una sala', trigger: 'change' }
+      ],
+    };
 
-interface Juzgado {
-  id_juzgado: number;
-  nom_juzgado: string;
-}
+    const formRef = ref(null);
 
-interface Usuario {
-  id: number;
-  nombres: string;
-  apellidos: string;
-}
+    onMounted(() => {
+      loadSalas();
+      loadJuzgados();
+      loadSedes();
+      if (props.initialData) {
+        Object.assign(form, props.initialData);
+        onUserChange(form.id_usuario); // Cargar juzgado y sala si hay datos iniciales
+      }
+    });
 
-const props = defineProps({
-  initialData: Object,
-  formMode: String
-})
+    const loadSalas = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/salas');
+        salas.value = response.data;
+      } catch (error) {
+        console.error('Error al cargar las salas:', error);
+      }
+    };
 
-const emit = defineEmits(['submit', 'cancel']);
+    const loadJuzgados = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/juzgados');
+        juzgados.value = response.data;
+      } catch (error) {
+        console.error('Error al cargar los juzgados:', error);
+      }
+    };
 
-const form = reactive<Reserva>({
-  descripcion: '',
-  fecha: '',
-  hora_inicio: '',
-  hora_fin: '',
-  estado: 'pendiente',
-  id_sala: 0,
-  id_juzgado: 0,
-  id_usuario: 0
-});
+    const loadSedes = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/sedes');
+        sedes.value = response.data;
+      } catch (error) {
+        console.error('Error al cargar las sedes:', error);
+      }
+    };
 
-const salas = ref<Sala[]>([]);
-const juzgados = ref<Juzgado[]>([]);
-const users = ref([]);
-const loading = ref(false);
+    const onUserChange = (userId) => {
+      const selectedUser = props.users.find(user => user.id === userId);
+      if (selectedUser) {
+        form.id_juzgado = selectedUser.id_juzgado;
+        form.id_sede = null; // Reiniciar selección de sede y sala
+        form.id_sala = null;
+      } else {
+        form.id_juzgado = null;
+        form.id_sede = null;
+        form.id_sala = null;
+      }
+    };
 
-const rules: FormRules = {
-  descripcion: [
-    { required: true, message: 'Por favor ingrese una descripción', trigger: 'blur' }
-  ],
-  fecha: [
-    { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' }
-  ],
-  hora_inicio: [
-    { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' }
-  ],
-  hora_fin: [
-    { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' }
-  ],
-  estado: [
-    { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
-  ],
-  id_sala: [
-    { required: true, message: 'Por favor seleccione una sala', trigger: 'change' }
-  ],
-  id_juzgado: [
-    { required: true, message: 'Por favor seleccione un juzgado', trigger: 'change' }
-  ],
-  id_usuario: [
-    { required: true, message: 'Por favor seleccione un usuario', trigger: 'change' }
-  ]
-};
+    const filteredSalas = computed(() => {
+      return salas.value.filter(sala => sala.id_sede === form.id_sede);
+    });
 
-const formRef = ref<FormInstance | null>(null);
+    const submitForm = async () => {
+      loading.value = true;
+      try {
+        await formRef.value.validate();
+        emit('submit', { ...form });
+      } catch (error) {
+        console.error('Error al validar el formulario:', error);
+      } finally {
+        loading.value = false;
+      }
+    };
 
-onMounted(() => {
-  loadSalas();
-  loadJuzgados();
-  loadUsers();
-  if (props.initialData) {
-    Object.assign(form, props.initialData);
+    const resetForm = () => {
+      formRef.value.resetFields();
+      Object.assign(form, {
+        descripcion: '',
+        fecha: '',
+        hora_inicio: '',
+        hora_fin: '',
+        estado: 'pendiente',
+        id_sala: null,
+        id_juzgado: null,
+        id_usuario: null,
+        id_sede: null,
+      });
+    };
+
+    return {
+      form,
+      salas,
+      juzgados,
+      sedes,
+      loading,
+      rules,
+      formRef,
+      onUserChange,
+      submitForm,
+      resetForm,
+      filteredSalas,
+    };
   }
-});
-
-const loadSalas = async () => {
-  try {
-    const response = await axios.get<Sala[]>('http://127.0.0.1:8000/api/salas');
-    salas.value = response.data;
-  } catch (error) {
-    console.error('Error al cargar las salas:', error);
-  }
 };
-
-const loadJuzgados = async () => {
-  try {
-    const response = await axios.get<Juzgado[]>('http://127.0.0.1:8000/api/juzgados');
-    juzgados.value = response.data;
-  } catch (error) {
-    console.error('Error al cargar los juzgados:', error);
-  }
-};
-
-const loadUsers = async () => {
-  try {
-    const response = await axios.get('http://127.0.0.1:8000/api/users');
-    users.value = response.data.data;
-    console.log('users.value ',users.value)
-  } catch (error) {
-    console.error('Error al cargar los usuarios:', error);
-  }
-};
-
-const submitForm = async () => {
-  loading.value = true;
-  try {
-    await formRef.value?.validate();
-    emit('submit', { ...form });
-  } finally {
-    loading.value = false;
-  }
-};
-
-const resetForm = () => {
-  formRef.value?.resetFields();
-};
-
-watch(() => props.initialData, (newValue) => {
-  if (newValue) {
-    Object.assign(form, newValue);
-  }
-});
 </script>
 
 <style scoped>

@@ -16,6 +16,7 @@
             <formReservas 
               :initialData="currentReserva" 
               :formMode="formMode"
+              :users="users" 
               @submit="handleSubmit" 
               @cancel="dialogVisible = false" 
             />
@@ -43,112 +44,136 @@
   </LayoutMain>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import LayoutMain from '../../components/LayoutMain.vue'
-import formReservas from './components/formReservas.vue'
-import Formulario from '../../components/Formulario.vue'
-import Header from '../../components/Header.vue'
-import { Delete, Edit } from "@element-plus/icons-vue"
-import { ElMessageBox, ElMessage } from 'element-plus'
-import axios from 'axios'
+<script>
+import { ref, onMounted } from 'vue';
+import LayoutMain from '../../components/LayoutMain.vue';
+import formReservas from './components/formReservas.vue';
+import Formulario from '../../components/Formulario.vue';
+import Header from '../../components/Header.vue';
+import { Delete, Edit } from "@element-plus/icons-vue";
+import { ElMessageBox, ElMessage } from 'element-plus';
+import axios from 'axios';
 
-interface Reserva {
-  id_reserva?: number;
-  descripcion: string;
-  fecha: string;
-  hora_inicio: string;
-  hora_fin: string;
-  estado: string;
-  id_sala: number;
-  id_juzgado: number;
-  id_usuario: number;
-  nom_sala?: string;
-  nom_juzgado?: string;
-  nombre_usuario?: string;
-}
+export default {
+  components: {
+    LayoutMain,
+    formReservas,
+    Formulario,
+    Header,
+    Delete,
+    Edit
+  },
+  setup() {
+    const dialogVisible = ref(false);
+    const reservas = ref([]);
+    const formMode = ref('create');
+    const currentReserva = ref(null);
+    const loading = ref(false);
+    const users = ref([]);
 
-const dialogVisible = ref(false)
-const reservas = ref<Reserva[]>([])
-const formMode = ref<'create' | 'edit'>('create')
-const currentReserva = ref<Reserva | null>(null)
-const loading = ref(false)
+    const loadReservas = async () => {
+      loading.value = true;
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/reservas');
+        reservas.value = response.data.data;
+      } catch (error) {
+        console.error('Error al cargar las reservas:', error);
+        ElMessage.error('Ocurrió un error al cargar las reservas');
+      } finally {
+        loading.value = false;
+      }
+    };
 
-const loadReservas = async () => {
-  loading.value = true
-  try {
-    const response = await axios.get('http://127.0.0.1:8000/api/reservas')
-    reservas.value = response.data.data
-  } catch (error) {
-    console.error('Error al cargar las reservas:', error)
-    ElMessage.error('Ocurrió un error al cargar las reservas')
-  } finally {
-    loading.value = false
+    const loadUsers = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/users');
+        users.value = response.data.data; 
+      } catch (error) {
+        console.error('Error al cargar los usuarios:', error);
+        ElMessage.error('Ocurrió un error al cargar los usuarios');
+      }
+    };
+
+    const showForm = () => {
+      formMode.value = 'create';
+      currentReserva.value = { 
+        descripcion: '', 
+        fecha: '', 
+        hora_inicio: '', 
+        hora_fin: '', 
+        estado: 'pendiente',
+        id_sala: null,
+        id_juzgado: null,
+        id_usuario: null
+      };
+      dialogVisible.value = true;
+    };
+
+    const handleSubmit = async (formData) => {
+      try {
+        if (formMode.value === 'create') {
+          await axios.post('http://127.0.0.1:8000/api/reservas', formData);
+          ElMessage.success('Reserva creada con éxito');
+        } else {
+          await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
+          ElMessage.success('Reserva actualizada con éxito');
+        }
+        dialogVisible.value = false;
+        await loadReservas();
+      } catch (error) {
+        console.error('Error al procesar la reserva:', error);
+        ElMessage.error('Ocurrió un error al procesar la reserva');
+      }
+    };
+
+    const editReserva = (reserva) => {
+      formMode.value = 'edit';
+      currentReserva.value = { ...reserva };
+      dialogVisible.value = true;
+    };
+
+    const deleteReserva = (reserva) => {
+      ElMessageBox.confirm(
+        `¿Está seguro que desea eliminar la reserva del ${reserva.fecha}?`,
+        'Advertencia',
+        {
+          confirmButtonText: 'Sí, eliminar',
+          cancelButtonText: 'Cancelar',
+          type: 'warning',
+        }
+      ).then(async () => {
+        try {
+          await axios.delete(`http://127.0.0.1:8000/api/reservas/${reserva.id_reserva}`);
+          ElMessage.success('Reserva eliminada con éxito');
+          await loadReservas();
+        } catch (error) {
+          console.error('Error al eliminar la reserva:', error);
+          ElMessage.error('Ocurrió un error al eliminar la reserva');
+        }
+      }).catch(() => {
+        ElMessage.info('Eliminación cancelada');
+      });
+    };
+
+    onMounted(() => {
+      loadReservas();
+      loadUsers(); 
+    });
+
+    return {
+      dialogVisible,
+      reservas,
+      formMode,
+      currentReserva,
+      loading,
+      users,
+      showForm,
+      handleSubmit,
+      editReserva,
+      deleteReserva,
+    };
   }
-}
-
-const showForm = () => {
-  formMode.value = 'create'
-  currentReserva.value = { 
-    descripcion: '', 
-    fecha: '', 
-    hora_inicio: '', 
-    hora_fin: '', 
-    estado: 'pendiente',
-    id_sala: 0,
-    id_juzgado: 0,
-    id_usuario: 0
-  }
-  dialogVisible.value = true
-}
-
-const handleSubmit = async (formData: Reserva) => {
-  try {
-    if (formMode.value === 'create') {
-      await axios.post('http://127.0.0.1:8000/api/reservas', formData)
-      ElMessage.success('Reserva creada con éxito')
-    } else {
-      await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData)
-      ElMessage.success('Reserva actualizada con éxito')
-    }
-    dialogVisible.value = false
-    await loadReservas()
-  } catch (error) {
-    console.error('Error al procesar la reserva:', error)
-    ElMessage.error('Ocurrió un error al procesar la reserva')
-  }
-}
-
-const editReserva = (reserva: Reserva) => {
-  formMode.value = 'edit'
-  currentReserva.value = { ...reserva }
-  dialogVisible.value = true
-}
-
-const deleteReserva = (reserva: Reserva) => {
-  ElMessageBox.confirm(
-    `¿Está seguro que desea eliminar la reserva del ${reserva.fecha}?`,
-    'Advertencia',
-    {
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      type: 'warning',
-    }
-  ).then(async () => {
-    try {
-      await axios.delete(`http://127.0.0.1:8000/api/reservas/${reserva.id_reserva}`)
-      ElMessage.success('Reserva eliminada con éxito')
-      await loadReservas()
-    } catch (error) {
-      console.error('Error al eliminar la reserva:', error)
-      ElMessage.error('Ocurrió un error al eliminar la reserva')
-    }
-  }).catch(() => {
-    ElMessage.info('Eliminación cancelada')
-  })
-}
-
-onMounted(loadReservas)
+};
 </script>
 
 <style scoped>
