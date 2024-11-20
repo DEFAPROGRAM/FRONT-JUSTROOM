@@ -45,7 +45,7 @@ const menuItems = ref([
     title: 'Configuración',
     icon: Setting,
     children: [
-      { title: 'Usuarios', route: '/usuarios' },
+      { title: 'Usuarios', route: '/users' },
       { title: 'Reportes', route: '/reportes' },
     ],
   },
