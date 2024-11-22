@@ -7,10 +7,10 @@
       <el-date-picker v-model="form.fecha" type="date" placeholder="Seleccione la fecha" format="YYYY-MM-DD" value-format="YYYY-MM-DD"></el-date-picker>
     </el-form-item>
     <el-form-item label="Hora Inicio" prop="hora_inicio">
-      <el-time-picker v-model="form.hora_inicio" format="HH:mm" placeholder="Seleccione la hora de inicio"></el-time-picker>
+      <el-time-picker v-model="form.hora_inicio" format="HH:mm:ss" value-format="HH:mm:ss" placeholder="Seleccione la hora de inicio"></el-time-picker>
     </el-form-item>
     <el-form-item label="Hora Fin" prop="hora_fin">
-      <el-time-picker v-model="form.hora_fin" format="HH:mm" placeholder="Seleccione la hora de fin"></el-time-picker>
+      <el-time-picker v-model="form.hora_fin" format="HH:mm:ss" value-format="HH:mm:ss" placeholder="Seleccione la hora de fin"></el-time-picker>
     </el-form-item>
     <el-form-item label="Estado" prop="estado">
       <el-select v-model="form.estado" placeholder="Seleccione el estado">
@@ -91,7 +91,7 @@ export default {
       required: true,
     },
   },
-  setup(props) {
+  setup(props, { emit }) { // Agregar 'emit' como segundo argumento
     const form = reactive({
       descripcion: '',
       fecha: '',
@@ -195,10 +195,11 @@ export default {
     });
 
     const submitForm = async () => {
+    
       loading.value = true;
       try {
         await formRef.value.validate();
-        emit('submit', { ...form });
+        emit('submit', { ...form }); // Emite el evento 'submit' correctamente
       } catch (error) {
         console.error('Error al validar el formulario:', error);
       } finally {
@@ -237,6 +238,7 @@ export default {
   }
 };
 </script>
+
 
 <style scoped>
 .el-form {

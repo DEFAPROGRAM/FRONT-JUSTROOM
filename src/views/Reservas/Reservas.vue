@@ -30,9 +30,9 @@
         <el-table-column prop="hora_inicio" label="Hora Inicio" />
         <el-table-column prop="hora_fin" label="Hora Fin" />
         <el-table-column prop="estado" label="Estado" />
-        <el-table-column prop="nom_sala" label="Sala" />
-        <el-table-column prop="nom_juzgado" label="Juzgado" />
-        <el-table-column prop="nombre_usuario" label="Usuario" />
+        <el-table-column prop="sala.nom_sala" label="Sala" />
+        <el-table-column prop="juzgado.nom_juzgado" label="Juzgado" />
+        <el-table-column prop="usuario.nombres" label="Usuario" />
         <el-table-column label="Acciones" width="200">
           <template #default="scope">
             <el-button type="primary" :icon="Edit" @click="editReserva(scope.row)" />
@@ -53,6 +53,7 @@ import Header from '../../components/Header.vue';
 import { Delete, Edit } from "@element-plus/icons-vue";
 import { ElMessageBox, ElMessage } from 'element-plus';
 import axios from 'axios';
+import dayjs from 'dayjs';
 
 export default {
   components: {
@@ -69,8 +70,9 @@ export default {
     const formMode = ref('create');
     const currentReserva = ref(null);
     const loading = ref(false);
-    const users = ref([]);
+    const users = ref([]);  // Definir 'users' como un array vacío inicialmente
 
+    // Función para cargar las reservas
     const loadReservas = async () => {
       loading.value = true;
       try {
@@ -84,16 +86,19 @@ export default {
       }
     };
 
+    // Función para cargar los usuarios
     const loadUsers = async () => {
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/users');
-        users.value = response.data.data; 
+        console.log('Respuesta de usuarios:', response.data); // Verificar la estructura de los datos
+        users.value = response.data.data;  // Asignar los datos correctamente a 'users'
       } catch (error) {
         console.error('Error al cargar los usuarios:', error);
         ElMessage.error('Ocurrió un error al cargar los usuarios');
       }
     };
 
+    // Mostrar formulario de creación
     const showForm = () => {
       formMode.value = 'create';
       currentReserva.value = { 
@@ -109,7 +114,9 @@ export default {
       dialogVisible.value = true;
     };
 
+    // Función para enviar el formulario
     const handleSubmit = async (formData) => {
+
       try {
         if (formMode.value === 'create') {
           await axios.post('http://127.0.0.1:8000/api/reservas', formData);
@@ -126,12 +133,14 @@ export default {
       }
     };
 
+    // Función para editar una reserva
     const editReserva = (reserva) => {
       formMode.value = 'edit';
       currentReserva.value = { ...reserva };
       dialogVisible.value = true;
     };
 
+    // Función para eliminar una reserva
     const deleteReserva = (reserva) => {
       ElMessageBox.confirm(
         `¿Está seguro que desea eliminar la reserva del ${reserva.fecha}?`,
@@ -155,9 +164,10 @@ export default {
       });
     };
 
+    // Cargar las reservas y usuarios cuando el componente se monta
     onMounted(() => {
       loadReservas();
-      loadUsers(); 
+      loadUsers();  // Asegurarse de que 'loadUsers' se ejecute correctamente
     });
 
     return {
