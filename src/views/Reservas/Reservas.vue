@@ -53,7 +53,6 @@ import Header from '../../components/Header.vue';
 import { Delete, Edit } from "@element-plus/icons-vue";
 import { ElMessageBox, ElMessage } from 'element-plus';
 import axios from 'axios';
-import dayjs from 'dayjs';
 
 export default {
   components: {
@@ -61,8 +60,6 @@ export default {
     formReservas,
     Formulario,
     Header,
-    Delete,
-    Edit
   },
   setup() {
     const dialogVisible = ref(false);
@@ -70,77 +67,92 @@ export default {
     const formMode = ref('create');
     const currentReserva = ref(null);
     const loading = ref(false);
-    const users = ref([]);  // Definir 'users' como un array vacío inicialmente
+    const users = ref([]);
 
-    // Función para cargar las reservas
     const loadReservas = async () => {
       loading.value = true;
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/reservas');
         reservas.value = response.data.data;
+        console.log('Reservas cargadas:', reservas.value);
       } catch (error) {
-        console.error('Error al cargar las reservas:', error);
-        ElMessage.error('Ocurrió un error al cargar las reservas');
+        console.error('Error al cargar las reservas:', error.response ? error.response.data : error.message);
+        ElMessage.error(`Error al cargar las reservas: ${error.response ? error.response.data.message : error.message}`);
       } finally {
         loading.value = false;
       }
     };
 
-    // Función para cargar los usuarios
     const loadUsers = async () => {
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/users');
-        console.log('Respuesta de usuarios:', response.data); // Verificar la estructura de los datos
-        users.value = response.data.data;  // Asignar los datos correctamente a 'users'
+        users.value = response.data.data;
       } catch (error) {
         console.error('Error al cargar los usuarios:', error);
         ElMessage.error('Ocurrió un error al cargar los usuarios');
       }
     };
 
-    // Mostrar formulario de creación
     const showForm = () => {
       formMode.value = 'create';
       currentReserva.value = { 
         descripcion: '', 
+        observaciones: '',
         fecha: '', 
         hora_inicio: '', 
         hora_fin: '', 
         estado: 'pendiente',
         id_sala: null,
         id_juzgado: null,
-        id_usuario: null
+        id_usuario: null,
+        id_sede: null
       };
       dialogVisible.value = true;
     };
 
-    // Función para enviar el formulario
     const handleSubmit = async (formData) => {
-
       try {
+        let response;
         if (formMode.value === 'create') {
-          await axios.post('http://127.0.0.1:8000/api/reservas', formData);
+          response = await axios.post('http://127.0.0.1:8000/api/reservas', formData);
           ElMessage.success('Reserva creada con éxito');
         } else {
-          await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
+          response = await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
           ElMessage.success('Reserva actualizada con éxito');
         }
+        console.log('Respuesta del servidor:', response.data);
         dialogVisible.value = false;
         await loadReservas();
       } catch (error) {
-        console.error('Error al procesar la reserva:', error);
-        ElMessage.error('Ocurrió un error al procesar la reserva');
+        if (error.response && error.response.data.errors) {
+          const errorMessages = Object.values(error.response.data.errors).flat();
+          ElMessage.error(errorMessages.join('\n'));
+        } else {
+          console.error('Error al procesar la reserva:', error.response ? error.response.data : error.message);
+          ElMessage.error(`Error al procesar la reserva: ${error.response ? error.response.data.message : error.message}`);
+        }
       }
     };
 
-    // Función para editar una reserva
     const editReserva = (reserva) => {
       formMode.value = 'edit';
-      currentReserva.value = { ...reserva };
+      currentReserva.value = { 
+        ...reserva,
+        id_reserva: reserva.id_reserva,
+        id_sala: reserva.sala.id_sala,
+        id_juzgado: reserva.juzgado.id_juzgado,
+        id_usuario: reserva.usuario.id,
+        fecha: reserva.fecha,
+        hora_inicio: reserva.hora_inicio,
+        hora_fin: reserva.hora_fin,
+        estado: reserva.estado,
+        descripcion: reserva.descripcion,
+        observaciones: reserva.observaciones
+      };
+      console.log('Editando reserva:', currentReserva.value);
       dialogVisible.value = true;
     };
 
-    // Función para eliminar una reserva
     const deleteReserva = (reserva) => {
       ElMessageBox.confirm(
         `¿Está seguro que desea eliminar la reserva del ${reserva.fecha}?`,
@@ -164,10 +176,9 @@ export default {
       });
     };
 
-    // Cargar las reservas y usuarios cuando el componente se monta
     onMounted(() => {
       loadReservas();
-      loadUsers();  // Asegurarse de que 'loadUsers' se ejecute correctamente
+      loadUsers();
     });
 
     return {
@@ -181,6 +192,8 @@ export default {
       handleSubmit,
       editReserva,
       deleteReserva,
+      Edit,
+      Delete
     };
   }
 };
@@ -191,3 +204,4 @@ export default {
   margin-top: 20px;
 }
 </style>
+
