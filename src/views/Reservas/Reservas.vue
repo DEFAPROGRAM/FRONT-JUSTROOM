@@ -26,7 +26,11 @@
       
       <el-table :data="reservas" style="width: 100%" v-loading="loading">
         <el-table-column prop="descripcion" label="Descripción" />
-        <el-table-column prop="fecha" label="Fecha" />
+        <el-table-column prop="fecha" label="Fecha">
+          <template #default="scope">
+            {{ formatDate(scope.row.fecha) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="hora_inicio" label="Hora Inicio" />
         <el-table-column prop="hora_fin" label="Hora Fin" />
         <el-table-column prop="estado" label="Estado" />
@@ -53,6 +57,7 @@ import Header from '../../components/Header.vue';
 import { Delete, Edit } from "@element-plus/icons-vue";
 import { ElMessageBox, ElMessage } from 'element-plus';
 import axios from 'axios';
+// import { format } from 'date-fns';
 
 export default {
   components: {
@@ -142,7 +147,7 @@ export default {
         id_sala: reserva.sala.id_sala,
         id_juzgado: reserva.juzgado.id_juzgado,
         id_usuario: reserva.usuario.id,
-        fecha: reserva.fecha,
+        fecha: formatDate(reserva.fecha), // Convertir la fecha al formato DD-MM-YYYY
         hora_inicio: reserva.hora_inicio,
         hora_fin: reserva.hora_fin,
         estado: reserva.estado,
@@ -176,6 +181,11 @@ export default {
       });
     };
 
+    const formatDate = (dateString) => {
+      const [year, month, day] = dateString.split('-');
+      return `${day}-${month}-${year}`;
+    };
+
     onMounted(() => {
       loadReservas();
       loadUsers();
@@ -193,7 +203,8 @@ export default {
       editReserva,
       deleteReserva,
       Edit,
-      Delete
+      Delete,
+      formatDate,
     };
   }
 };

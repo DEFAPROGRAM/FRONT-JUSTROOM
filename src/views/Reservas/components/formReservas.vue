@@ -11,8 +11,8 @@
         v-model="form.fecha" 
         type="date" 
         placeholder="Seleccione la fecha" 
-        format="YYYY-MM-DD" 
-        value-format="YYYY-MM-DD">
+        format="DD-MM-YYYY" 
+        value-format="DD-MM-YYYY">
       </el-date-picker>
     </el-form-item>
     <el-form-item label="Hora Inicio" prop="hora_inicio" required>
@@ -138,7 +138,12 @@ export default {
         { required: false, message: 'Las observaciones son opcionales', trigger: 'blur' }
       ],
       fecha: [
-        { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' }
+        { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' },
+        { 
+          pattern: /^\d{2}-\d{2}-\d{4}$/, 
+          message: 'Formato de fecha inválido (DD-MM-YYYY)', 
+          trigger: 'blur' 
+        }
       ],
       hora_inicio: [
         { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' },
@@ -152,8 +157,7 @@ export default {
         { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
       ],
       id_sala: [
-        { required: true, message:
-'Por favor seleccione una sala', trigger: 'change' }
+        { required: true, message: 'Por favor seleccione una sala', trigger: 'change' }
       ],
       id_juzgado: [
         { required: true, message: 'Por favor seleccione un juzgado', trigger: 'change' }
