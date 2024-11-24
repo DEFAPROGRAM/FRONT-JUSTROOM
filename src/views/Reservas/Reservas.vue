@@ -30,9 +30,9 @@
         <el-table-column prop="hora_inicio" label="Hora Inicio" />
         <el-table-column prop="hora_fin" label="Hora Fin" />
         <el-table-column prop="estado" label="Estado" />
-        <el-table-column prop="nom_sala" label="Sala" />
-        <el-table-column prop="nom_juzgado" label="Juzgado" />
-        <el-table-column prop="nombre_usuario" label="Usuario" />
+        <el-table-column prop="sala.nom_sala" label="Sala" />
+        <el-table-column prop="juzgado.nom_juzgado" label="Juzgado" />
+        <el-table-column prop="usuario.nombres" label="Usuario" />
         <el-table-column label="Acciones" width="200">
           <template #default="scope">
             <el-button type="primary" :icon="Edit" @click="editReserva(scope.row)" />
@@ -60,8 +60,6 @@ export default {
     formReservas,
     Formulario,
     Header,
-    Delete,
-    Edit
   },
   setup() {
     const dialogVisible = ref(false);
@@ -76,9 +74,10 @@ export default {
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/reservas');
         reservas.value = response.data.data;
+        console.log('Reservas cargadas:', reservas.value);
       } catch (error) {
-        console.error('Error al cargar las reservas:', error);
-        ElMessage.error('Ocurrió un error al cargar las reservas');
+        console.error('Error al cargar las reservas:', error.response ? error.response.data : error.message);
+        ElMessage.error(`Error al cargar las reservas: ${error.response ? error.response.data.message : error.message}`);
       } finally {
         loading.value = false;
       }
@@ -87,7 +86,7 @@ export default {
     const loadUsers = async () => {
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/users');
-        users.value = response.data.data; 
+        users.value = response.data.data;
       } catch (error) {
         console.error('Error al cargar los usuarios:', error);
         ElMessage.error('Ocurrió un error al cargar los usuarios');
@@ -98,37 +97,59 @@ export default {
       formMode.value = 'create';
       currentReserva.value = { 
         descripcion: '', 
+        observaciones: '',
         fecha: '', 
         hora_inicio: '', 
         hora_fin: '', 
         estado: 'pendiente',
         id_sala: null,
         id_juzgado: null,
-        id_usuario: null
+        id_usuario: null,
+        id_sede: null
       };
       dialogVisible.value = true;
     };
 
     const handleSubmit = async (formData) => {
       try {
+        let response;
         if (formMode.value === 'create') {
-          await axios.post('http://127.0.0.1:8000/api/reservas', formData);
+          response = await axios.post('http://127.0.0.1:8000/api/reservas', formData);
           ElMessage.success('Reserva creada con éxito');
         } else {
-          await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
+          response = await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
           ElMessage.success('Reserva actualizada con éxito');
         }
+        console.log('Respuesta del servidor:', response.data);
         dialogVisible.value = false;
         await loadReservas();
       } catch (error) {
-        console.error('Error al procesar la reserva:', error);
-        ElMessage.error('Ocurrió un error al procesar la reserva');
+        if (error.response && error.response.data.errors) {
+          const errorMessages = Object.values(error.response.data.errors).flat();
+          ElMessage.error(errorMessages.join('\n'));
+        } else {
+          console.error('Error al procesar la reserva:', error.response ? error.response.data : error.message);
+          ElMessage.error(`Error al procesar la reserva: ${error.response ? error.response.data.message : error.message}`);
+        }
       }
     };
 
     const editReserva = (reserva) => {
       formMode.value = 'edit';
-      currentReserva.value = { ...reserva };
+      currentReserva.value = { 
+        ...reserva,
+        id_reserva: reserva.id_reserva,
+        id_sala: reserva.sala.id_sala,
+        id_juzgado: reserva.juzgado.id_juzgado,
+        id_usuario: reserva.usuario.id,
+        fecha: reserva.fecha,
+        hora_inicio: reserva.hora_inicio,
+        hora_fin: reserva.hora_fin,
+        estado: reserva.estado,
+        descripcion: reserva.descripcion,
+        observaciones: reserva.observaciones
+      };
+      console.log('Editando reserva:', currentReserva.value);
       dialogVisible.value = true;
     };
 
@@ -157,7 +178,7 @@ export default {
 
     onMounted(() => {
       loadReservas();
-      loadUsers(); 
+      loadUsers();
     });
 
     return {
@@ -171,6 +192,8 @@ export default {
       handleSubmit,
       editReserva,
       deleteReserva,
+      Edit,
+      Delete
     };
   }
 };
@@ -181,3 +204,4 @@ export default {
   margin-top: 20px;
 }
 </style>
+

@@ -22,7 +22,10 @@
     <el-form-item label="Email" prop="email">
       <el-input v-model="form.email" placeholder="Ingrese el email"></el-input>
     </el-form-item>
-    <el-form-item label="Contraseña" prop="password" v-if="formMode === 'create'">
+    <el-form-item v-if="formMode === 'edit'" label="Cambiar contraseña">
+      <el-checkbox v-model="changePassword">Cambiar contraseña</el-checkbox>
+    </el-form-item>
+    <el-form-item label="Contraseña" prop="password" v-if="formMode === 'create' || changePassword">
       <el-input v-model="form.password" type="password" placeholder="Ingrese la contraseña"></el-input>
     </el-form-item>
     <el-form-item label="Rol" prop="rol">
@@ -76,6 +79,7 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const sedes = ref<Sede[]>([])
 const juzgados = ref<Juzgado[]>([])
+const changePassword = ref(false)
 
 const form = reactive<User>({
   nombres: '',
@@ -123,6 +127,7 @@ const rules: FormRules = {
 watch(() => props.initialData, (newData) => {
   if (newData) {
     Object.assign(form, newData)
+    form.password = '' // Limpiar la contraseña en modo edición
   } else {
     resetForm()
   }
@@ -132,7 +137,11 @@ const submitForm = async () => {
   if (!formRef.value) return
   await formRef.value.validate((valid) => {
     if (valid) {
-      emit('submit', { ...form })
+      const formData = { ...form }
+      if (props.formMode === 'edit' && !changePassword.value) {
+        delete formData.password
+      }
+      emit('submit', formData)
     } else {
       console.error('Error en el formulario')
     }
@@ -142,6 +151,7 @@ const submitForm = async () => {
 const resetForm = () => {
   if (!formRef.value) return
   formRef.value.resetFields()
+  changePassword.value = false
 }
 
 const loadSedes = async () => {
@@ -167,6 +177,7 @@ onMounted(() => {
   loadJuzgados()
   if (props.initialData) {
     Object.assign(form, props.initialData)
+    form.password = '' // Limpiar la contraseña en modo edición
   } else {
     resetForm()
   }
