@@ -10,6 +10,7 @@
         v-model="dialogVisible"
         :title="formMode === 'create' ? 'Crear Nueva Reserva' : 'Editar Reserva'"
         width="50%"
+        @close="closeDialog"
       >
         <Formulario :titulo="'Formulario de Reservas'">
           <template #slotForm>
@@ -26,13 +27,34 @@
       
       <el-table :data="reservas" style="width: 100%" v-loading="loading">
         <el-table-column prop="descripcion" label="Descripción" />
-        <el-table-column prop="fecha" label="Fecha" />
+        <el-table-column prop="fecha" label="Fecha">
+          <template #default="scope">
+            {{ formatDate(scope.row.fecha) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="hora_inicio" label="Hora Inicio" />
         <el-table-column prop="hora_fin" label="Hora Fin" />
-        <el-table-column prop="estado" label="Estado" />
+        <el-table-column prop="estado" label="Estado">
+          <template #default="scope">
+            <span 
+              class="status-badge"
+              :class="{
+                'status-pending': scope.row.estado === 'pendiente',
+                'status-confirmed': scope.row.estado === 'confirmada',
+                'status-cancelled': scope.row.estado === 'cancelada'
+              }"
+            >
+              {{ scope.row.estado.charAt(0).toUpperCase() + scope.row.estado.slice(1) }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="sala.nom_sala" label="Sala" />
         <el-table-column prop="juzgado.nom_juzgado" label="Juzgado" />
-        <el-table-column prop="usuario.nombres" label="Usuario" />
+        <el-table-column label="Usuario">
+          <template #default="scope">
+            {{ getUserFullName(scope.row.usuario) }}
+          </template>
+        </el-table-column>
         <el-table-column label="Acciones" width="200">
           <template #default="scope">
             <el-button type="primary" :icon="Edit" @click="editReserva(scope.row)" />
@@ -142,9 +164,10 @@ export default {
         id_sala: reserva.sala.id_sala,
         id_juzgado: reserva.juzgado.id_juzgado,
         id_usuario: reserva.usuario.id,
-        fecha: reserva.fecha,
-        hora_inicio: reserva.hora_inicio,
-        hora_fin: reserva.hora_fin,
+        id_sede: reserva.sala.id_sede,
+        fecha: formatDate(reserva.fecha),
+        hora_inicio: reserva.hora_inicio.substring(0, 5), 
+        hora_fin: reserva.hora_fin.substring(0, 5), 
         estado: reserva.estado,
         descripcion: reserva.descripcion,
         observaciones: reserva.observaciones
@@ -155,7 +178,7 @@ export default {
 
     const deleteReserva = (reserva) => {
       ElMessageBox.confirm(
-        `¿Está seguro que desea eliminar la reserva del ${reserva.fecha}?`,
+        `¿Está seguro que desea eliminar la reserva del ${formatDate(reserva.fecha)}?`,
         'Advertencia',
         {
           confirmButtonText: 'Sí, eliminar',
@@ -176,6 +199,23 @@ export default {
       });
     };
 
+    const formatDate = (dateString) => {
+      if (!dateString) return '';
+      const [year, month, day] = dateString.split('-');
+      return `${day}-${month}-${year}`;
+    };
+
+    const getUserFullName = (usuario) => {
+      if (!usuario) return 'Usuario no asignado';
+      return `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Nombre no disponible';
+    };
+
+    const closeDialog = () => {
+      dialogVisible.value = false;
+      currentReserva.value = null;
+      formMode.value = 'create';
+    };
+
     onMounted(() => {
       loadReservas();
       loadUsers();
@@ -193,7 +233,10 @@ export default {
       editReserva,
       deleteReserva,
       Edit,
-      Delete
+      Delete,
+      formatDate,
+      getUserFullName,
+      closeDialog,
     };
   }
 };
@@ -203,5 +246,31 @@ export default {
 .el-table {
   margin-top: 20px;
 }
-</style>
 
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+  display: inline-block;
+  font-size: 0.875rem;
+}
+
+.status-pending {
+  background-color: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+
+.status-confirmed {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.status-cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+</style>
