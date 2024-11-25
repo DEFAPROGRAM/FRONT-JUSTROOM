@@ -10,6 +10,7 @@
         v-model="dialogVisible"
         :title="formMode === 'create' ? 'Crear Nueva Reserva' : 'Editar Reserva'"
         width="50%"
+        @close="closeDialog"
       >
         <Formulario :titulo="'Formulario de Reservas'">
           <template #slotForm>
@@ -36,7 +37,11 @@
         <el-table-column prop="estado" label="Estado" />
         <el-table-column prop="sala.nom_sala" label="Sala" />
         <el-table-column prop="juzgado.nom_juzgado" label="Juzgado" />
-        <el-table-column prop="usuario.nombres" label="Usuario" />
+        <el-table-column label="Usuario">
+          <template #default="scope">
+            {{ getUserFullName(scope.row.usuario) }}
+          </template>
+        </el-table-column>
         <el-table-column label="Acciones" width="200">
           <template #default="scope">
             <el-button type="primary" :icon="Edit" @click="editReserva(scope.row)" />
@@ -57,7 +62,6 @@ import Header from '../../components/Header.vue';
 import { Delete, Edit } from "@element-plus/icons-vue";
 import { ElMessageBox, ElMessage } from 'element-plus';
 import axios from 'axios';
-// import { format } from 'date-fns';
 
 export default {
   components: {
@@ -147,9 +151,10 @@ export default {
         id_sala: reserva.sala.id_sala,
         id_juzgado: reserva.juzgado.id_juzgado,
         id_usuario: reserva.usuario.id,
-        fecha: formatDate(reserva.fecha), // Convertir la fecha al formato DD-MM-YYYY
-        hora_inicio: reserva.hora_inicio,
-        hora_fin: reserva.hora_fin,
+        id_sede: reserva.sala.id_sede,
+        fecha: formatDate(reserva.fecha),
+        hora_inicio: reserva.hora_inicio.substring(0, 5), 
+        hora_fin: reserva.hora_fin.substring(0, 5), 
         estado: reserva.estado,
         descripcion: reserva.descripcion,
         observaciones: reserva.observaciones
@@ -160,7 +165,7 @@ export default {
 
     const deleteReserva = (reserva) => {
       ElMessageBox.confirm(
-        `¿Está seguro que desea eliminar la reserva del ${reserva.fecha}?`,
+        `¿Está seguro que desea eliminar la reserva del ${formatDate(reserva.fecha)}?`,
         'Advertencia',
         {
           confirmButtonText: 'Sí, eliminar',
@@ -182,8 +187,20 @@ export default {
     };
 
     const formatDate = (dateString) => {
+      if (!dateString) return '';
       const [year, month, day] = dateString.split('-');
       return `${day}-${month}-${year}`;
+    };
+
+    const getUserFullName = (usuario) => {
+      if (!usuario) return 'Usuario no asignado';
+      return `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Nombre no disponible';
+    };
+
+    const closeDialog = () => {
+      dialogVisible.value = false;
+      currentReserva.value = null;
+      formMode.value = 'create';
     };
 
     onMounted(() => {
@@ -205,6 +222,8 @@ export default {
       Edit,
       Delete,
       formatDate,
+      getUserFullName,
+      closeDialog,
     };
   }
 };

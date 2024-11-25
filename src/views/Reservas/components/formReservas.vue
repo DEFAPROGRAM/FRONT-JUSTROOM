@@ -147,11 +147,11 @@ export default {
       ],
       hora_inicio: [
         { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' },
-        { pattern: /^([01]\d|2[0-3]):([0-5]\d)$/, message: 'Formato de hora inválido (HH:mm)', trigger: 'blur' }
+        { pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: 'Formato de hora inválido (HH:mm)', trigger: 'blur' }
       ],
       hora_fin: [
         { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' },
-        { pattern: /^([01]\d|2[0-3]):([0-5]\d)$/, message: 'Formato de hora inválido (HH:mm)', trigger: 'blur' }
+        { pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: 'Formato de hora inválido (HH:mm)', trigger: 'blur' }
       ],
       estado: [
         { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
@@ -164,6 +164,9 @@ export default {
       ],
       id_usuario: [
         { required: true, message: 'Por favor seleccione un usuario', trigger: 'change' }
+      ],
+      id_sede: [
+        { required: true, message: 'Por favor seleccione una sede', trigger: 'change' }
       ],
     };
 
@@ -187,6 +190,7 @@ export default {
         salas.value = response.data;
       } catch (error) {
         console.error('Error al cargar las salas:', error);
+        ElMessage.error('Error al cargar las salas');
       }
     };
 
@@ -196,6 +200,7 @@ export default {
         juzgados.value = response.data;
       } catch (error) {
         console.error('Error al cargar los juzgados:', error);
+        ElMessage.error('Error al cargar los juzgados');
       }
     };
 
@@ -205,6 +210,7 @@ export default {
         sedes.value = response.data;
       } catch (error) {
         console.error('Error al cargar las sedes:', error);
+        ElMessage.error('Error al cargar las sedes');
       }
     };
 
@@ -268,6 +274,7 @@ export default {
         id_usuario: null,
         id_sede: null,
       });
+      emit('formReset');
     };
 
     return {
