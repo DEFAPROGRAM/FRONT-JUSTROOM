@@ -34,7 +34,20 @@
         </el-table-column>
         <el-table-column prop="hora_inicio" label="Hora Inicio" />
         <el-table-column prop="hora_fin" label="Hora Fin" />
-        <el-table-column prop="estado" label="Estado" />
+        <el-table-column prop="estado" label="Estado">
+          <template #default="scope">
+            <span 
+              class="status-badge"
+              :class="{
+                'status-pending': scope.row.estado === 'pendiente',
+                'status-confirmed': scope.row.estado === 'confirmada',
+                'status-cancelled': scope.row.estado === 'cancelada'
+              }"
+            >
+              {{ scope.row.estado.charAt(0).toUpperCase() + scope.row.estado.slice(1) }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="sala.nom_sala" label="Sala" />
         <el-table-column prop="juzgado.nom_juzgado" label="Juzgado" />
         <el-table-column label="Usuario">
@@ -233,5 +246,31 @@ export default {
 .el-table {
   margin-top: 20px;
 }
-</style>
 
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+  display: inline-block;
+  font-size: 0.875rem;
+}
+
+.status-pending {
+  background-color: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+
+.status-confirmed {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.status-cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+</style>

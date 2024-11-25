@@ -256,6 +256,7 @@ export default {
         }
       } finally {
         loading.value = false;
+        resetForm
       }
     };
 
