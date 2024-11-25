@@ -10,13 +10,13 @@
       <el-input v-model="form.cargo" placeholder="Ingrese el cargo"></el-input>
     </el-form-item>
     <el-form-item label="Sede" prop="id_sede">
-      <el-select v-model="form.id_sede" placeholder="Seleccione la sede">
+      <el-select v-model="form.id_sede" placeholder="Seleccione la sede" @change="onSedeChange">
         <el-option v-for="sede in sedes" :key="sede.id_sede" :label="sede.nom_sede" :value="sede.id_sede"></el-option>
       </el-select>
     </el-form-item>
     <el-form-item label="Juzgado" prop="id_juzgado">
       <el-select v-model="form.id_juzgado" placeholder="Seleccione el juzgado">
-        <el-option v-for="juzgado in juzgados" :key="juzgado.id_juzgado" :label="juzgado.nom_juzgado" :value="juzgado.id_juzgado"></el-option>
+        <el-option v-for="juzgado in filteredJuzgados" :key="juzgado.id_juzgado" :label="juzgado.nom_juzgado" :value="juzgado.id_juzgado"></el-option>
       </el-select>
     </el-form-item>
     <el-form-item label="Email" prop="email">
@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch, onMounted } from 'vue'
+import { reactive, ref, watch, onMounted, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import axios from 'axios'
 
@@ -66,6 +66,7 @@ interface Sede {
 interface Juzgado {
   id_juzgado: number;
   nom_juzgado: string;
+  id_sede: number;
 }
 
 const props = defineProps<{
@@ -90,6 +91,11 @@ const form = reactive<User>({
   email: '',
   password: '',
   rol: ''
+})
+
+const filteredJuzgados = computed(() => {
+  if (!form.id_sede) return []
+  return juzgados.value.filter(juzgado => juzgado.id_sede === form.id_sede)
 })
 
 const rules: FormRules = {
@@ -124,10 +130,14 @@ const rules: FormRules = {
   ]
 }
 
+const onSedeChange = () => {
+  form.id_juzgado = 0
+}
+
 watch(() => props.initialData, (newData) => {
   if (newData) {
     Object.assign(form, newData)
-    form.password = '' // Limpiar la contraseña en modo edición
+    form.password = ''
   } else {
     resetForm()
   }
@@ -177,7 +187,7 @@ onMounted(() => {
   loadJuzgados()
   if (props.initialData) {
     Object.assign(form, props.initialData)
-    form.password = '' // Limpiar la contraseña en modo edición
+    form.password = ''
   } else {
     resetForm()
   }
