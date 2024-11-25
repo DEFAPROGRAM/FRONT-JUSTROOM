@@ -12,7 +12,9 @@
         type="date" 
         placeholder="Seleccione la fecha" 
         format="DD-MM-YYYY" 
-        value-format="DD-MM-YYYY">
+        value-format="DD-MM-YYYY"
+        :disabled-date="disablePastDates"
+        @change="checkAvailableSalas">
       </el-date-picker>
     </el-form-item>
     <el-form-item label="Hora Inicio" prop="hora_inicio" required>
@@ -20,7 +22,8 @@
         v-model="form.hora_inicio" 
         format="HH:mm" 
         value-format="HH:mm"
-        placeholder="Seleccione la hora de inicio">
+        placeholder="Seleccione la hora de inicio"
+        @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
     <el-form-item label="Hora Fin" prop="hora_fin" required>
@@ -28,7 +31,8 @@
         v-model="form.hora_fin" 
         format="HH:mm" 
         value-format="HH:mm"
-        placeholder="Seleccione la hora de fin">
+        placeholder="Seleccione la hora de fin"
+        @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
     <el-form-item label="Estado" prop="estado" required>
@@ -77,7 +81,7 @@
     <el-form-item label="Sala" prop="id_sala" required>
       <el-select v-model="form.id_sala" placeholder="Seleccione la sala">
         <el-option 
-          v-for="sala in filteredSalas" 
+          v-for="sala in availableSalas" 
           :key="sala.id_sala" 
           :label="sala.nom_sala" 
           :value="sala.id_sala">
@@ -130,6 +134,9 @@ export default {
     const juzgados = ref([]);
     const sedes = ref([]);
     const loading = ref(false);
+    const reservas = ref([]);
+    const availableSalas = ref([]);
+
     const rules = {
       descripcion: [
         { required: false, message: 'La descripción es opcional', trigger: 'blur' }
@@ -172,10 +179,60 @@ export default {
 
     const formRef = ref(null);
 
+    const disablePastDates = (date) => {
+      return date < new Date(new Date().setHours(0, 0, 0, 0));
+    };
+
+    const loadReservas = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/reservas');
+        reservas.value = response.data.data;
+      } catch (error) {
+        console.error('Error al cargar las reservas:', error);
+        ElMessage.error('Error al cargar las reservas');
+      }
+    };
+
+    const checkAvailableSalas = async () => {
+      if (!form.fecha || !form.hora_inicio || !form.hora_fin || !form.id_sede) {
+        return;
+      }
+
+      const selectedDate = form.fecha;
+      const startTime = form.hora_inicio;
+      const endTime = form.hora_fin;
+
+      // Filtrar las salas disponibles
+      const allSalasForSede = salas.value.filter(sala => sala.id_sede === form.id_sede);
+      const reservedSalas = reservas.value.filter(reserva => {
+        // Convertir la fecha de la reserva al formato DD-MM-YYYY para comparar
+        const reservaDate = reserva.fecha.split('-').reverse().join('-');
+        
+        return (
+          reservaDate === selectedDate &&
+          reserva.estado !== 'cancelada' &&
+          ((startTime >= reserva.hora_inicio && startTime < reserva.hora_fin) ||
+           (endTime > reserva.hora_inicio && endTime <= reserva.hora_fin) ||
+           (startTime <= reserva.hora_inicio && endTime >= reserva.hora_fin))
+        );
+      }).map(reserva => reserva.id_sala);
+
+      // Filtrar las salas que no están reservadas
+      availableSalas.value = allSalasForSede.filter(
+        sala => !reservedSalas.includes(sala.id_sala)
+      );
+
+      // Si la sala seleccionada ya no está disponible, limpiarla
+      if (form.id_sala && !availableSalas.value.find(sala => sala.id_sala === form.id_sala)) {
+        form.id_sala = null;
+      }
+    };
+
     onMounted(() => {
       loadSalas();
       loadJuzgados();
       loadSedes();
+      loadReservas();
     });
 
     watch(() => props.initialData, (newValue) => {
@@ -183,6 +240,13 @@ export default {
         Object.assign(form, newValue);
       }
     }, { deep: true, immediate: true });
+
+    watch(
+      () => [form.fecha, form.hora_inicio, form.hora_fin, form.id_sede],
+      () => {
+        checkAvailableSalas();
+      }
+    );
 
     const loadSalas = async () => {
       try {
@@ -227,11 +291,8 @@ export default {
 
     const onSedeChange = () => {
       form.id_sala = null;
+      checkAvailableSalas();
     };
-
-    const filteredSalas = computed(() => {
-      return salas.value.filter(sala => sala.id_sede === form.id_sede);
-    });
 
     const submitForm = async () => {
       loading.value = true;
@@ -256,7 +317,6 @@ export default {
         }
       } finally {
         loading.value = false;
-        resetForm
       }
     };
 
@@ -290,7 +350,9 @@ export default {
       onSedeChange,
       submitForm,
       resetForm,
-      filteredSalas,
+      availableSalas,
+      disablePastDates,
+      checkAvailableSalas
     };
   }
 };
@@ -302,4 +364,3 @@ export default {
   margin: 20px auto;
 }
 </style>
-
