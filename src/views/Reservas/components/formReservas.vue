@@ -1,106 +1,3 @@
-<template>
-  <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
-    <el-form-item label="Usuario" prop="id_usuario" required>
-      <el-select 
-        v-model="form.id_usuario" 
-        placeholder="Seleccione el usuario" 
-        @change="onUserChange">
-        <el-option 
-          v-for="usuario in users" 
-          :key="usuario.id" 
-          :label="`${usuario.nombres} ${usuario.apellidos}`" 
-          :value="usuario.id">
-        </el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="Sede" prop="id_sede">
-      <el-input 
-        v-model="selectedSedeName" 
-        placeholder="Sede del usuario"
-        disabled>
-      </el-input>
-    </el-form-item>
-    <el-form-item label="Juzgado" prop="id_juzgado">
-      <el-input 
-        v-model="selectedJuzgadoName" 
-        placeholder="Juzgado del usuario"
-        disabled>
-      </el-input>
-    </el-form-item>
-    <el-form-item label="Descripción" prop="descripcion">
-      <el-input 
-        v-model="form.descripcion" 
-        type="textarea" 
-        :rows="2" 
-        placeholder="Ingrese la descripción de la reserva">
-      </el-input>
-    </el-form-item>
-    <el-form-item label="Observaciones" prop="observaciones">
-      <el-input 
-        v-model="form.observaciones" 
-        type="textarea" 
-        :rows="2" 
-        placeholder="Ingrese las observaciones de la reserva">
-      </el-input>
-    </el-form-item>
-    <el-form-item label="Fecha" prop="fecha" required>
-      <el-date-picker 
-        v-model="form.fecha" 
-        type="date" 
-        placeholder="Seleccione la fecha" 
-        format="DD-MM-YYYY" 
-        value-format="DD-MM-YYYY"
-        :disabled-date="disablePastDates"
-        @change="checkAvailableSalas">
-      </el-date-picker>
-    </el-form-item>
-    <el-form-item label="Hora Inicio" prop="hora_inicio" required>
-      <el-time-picker 
-        v-model="form.hora_inicio" 
-        format="HH:mm" 
-        value-format="HH:mm"
-        :disabled="!form.fecha"
-        placeholder="Seleccione la hora de inicio"
-        @change="checkAvailableSalas">
-      </el-time-picker>
-    </el-form-item>
-    <el-form-item label="Hora Fin" prop="hora_fin" required>
-      <el-time-picker 
-        v-model="form.hora_fin" 
-        format="HH:mm" 
-        value-format="HH:mm"
-        :disabled="!form.hora_inicio"
-        placeholder="Seleccione la hora de fin"
-        @change="checkAvailableSalas">
-      </el-time-picker>
-    </el-form-item>
-    <el-form-item label="Sala" prop="id_sala" required>
-      <el-select 
-        v-model="form.id_sala" 
-        placeholder="Seleccione la sala"
-        :disabled="!form.hora_fin">
-        <el-option 
-          v-for="sala in availableSalas" 
-          :key="sala.id_sala" 
-          :label="sala.nom_sala" 
-          :value="sala.id_sala">
-        </el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="Estado" prop="estado" required>
-      <el-select v-model="form.estado" placeholder="Seleccione el estado">
-        <el-option label="Pendiente" value="pendiente"></el-option>
-        <el-option label="Confirmada" value="confirmada"></el-option>
-        <el-option label="Cancelada" value="cancelada"></el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item>
-      <el-button type="primary" @click="submitForm" :loading="loading">Guardar</el-button>
-      <el-button @click="resetForm">Limpiar</el-button>
-    </el-form-item>
-  </el-form>
-</template>
-
 <script setup>
 import { reactive, ref, onMounted, computed, watch } from 'vue';
 import axios from 'axios';
@@ -203,9 +100,14 @@ const onUserChange = async (userId) => {
       const sede = sedes.value.find(s => s.id_sede === juzgado.id_sede);
       selectedSedeName.value = sede ? sede.nom_sede : '';
       selectedJuzgadoName.value = juzgado.nom_juzgado;
+      form.id_sala = null; // Limpiar la sala seleccionada al cambiar de usuario
       await checkAvailableSalas();
     }
   }
+};
+
+const isTimeOverlap = (start1, end1, start2, end2) => {
+  return (start1 < end2 && end1 > start2);
 };
 
 const checkAvailableSalas = async () => {
@@ -214,31 +116,45 @@ const checkAvailableSalas = async () => {
     return;
   }
 
+  // Convertir el formato de fecha DD-MM-YYYY a YYYY-MM-DD para comparación
+  const [day, month, year] = form.fecha.split('-');
+  const formattedDate = `${year}-${month}-${day}`;
+
   // Obtener todas las salas de la sede seleccionada
   const sedesSalas = salas.value.filter(sala => sala.id_sede === form.id_sede);
 
-  // Filtrar las reservas que se solapan
-  const reservasEnHorario = reservas.value.filter(reserva => {
-    if (reserva.estado === 'cancelada') return false;
-    if (reserva.fecha !== form.fecha) return false;
+  // Crear un mapa de salas ocupadas
+  const salasOcupadas = new Map();
 
-    const reservaInicio = reserva.hora_inicio;
-    const reservaFin = reserva.hora_fin;
-    
-    return (
-      (form.hora_inicio >= reservaInicio && form.hora_inicio < reservaFin) ||
-      (form.hora_fin > reservaInicio && form.hora_fin <= reservaFin) ||
-      (form.hora_inicio <= reservaInicio && form.hora_fin >= reservaFin)
-    );
-  });
+  // Verificar cada sala individualmente
+  for (const sala of sedesSalas) {
+    const reservasSala = reservas.value.filter(reserva => {
+      // Ignorar reservas canceladas y la reserva actual en modo edición
+      if (reserva.estado === 'cancelada' || 
+          (props.formMode === 'edit' && reserva.id_reserva === form.id_reserva)) {
+        return false;
+      }
 
-  // Obtener los IDs de las salas ocupadas
-  const salasOcupadas = reservasEnHorario.map(r => r.id_sala);
+      // Verificar si es la misma sala y fecha
+      if (reserva.id_sala === sala.id_sala && reserva.fecha === formattedDate) {
+        // Verificar solapamiento de horarios
+        return isTimeOverlap(
+          form.hora_inicio,
+          form.hora_fin,
+          reserva.hora_inicio,
+          reserva.hora_fin
+        );
+      }
+      return false;
+    });
+
+    if (reservasSala.length > 0) {
+      salasOcupadas.set(sala.id_sala, true);
+    }
+  }
 
   // Filtrar las salas disponibles
-  availableSalas.value = sedesSalas.filter(sala => 
-    !salasOcupadas.includes(sala.id_sala)
-  );
+  availableSalas.value = sedesSalas.filter(sala => !salasOcupadas.has(sala.id_sala));
 
   // Si la sala seleccionada ya no está disponible, limpiarla
   if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
@@ -255,6 +171,14 @@ const submitForm = async () => {
   
   try {
     await formRef.value.validate();
+    
+    // Verificar disponibilidad antes de enviar
+    await checkAvailableSalas();
+    if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
+      ElMessage.error('La sala seleccionada no está disponible para este horario');
+      return;
+    }
+    
     loading.value = true;
     emit('submit', { ...form });
   } catch (error) {
@@ -299,6 +223,112 @@ onMounted(() => {
 });
 </script>
 
+<template>
+  <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+    <el-form-item label="Usuario" prop="id_usuario" required>
+      <el-select 
+        v-model="form.id_usuario" 
+        placeholder="Seleccione el usuario" 
+        @change="onUserChange">
+        <el-option 
+          v-for="usuario in users" 
+          :key="usuario.id" 
+          :label="`${usuario.nombres} ${usuario.apellidos}`" 
+          :value="usuario.id">
+        </el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="Sede" prop="id_sede">
+      <el-input 
+        v-model="selectedSedeName" 
+        placeholder="Sede del usuario"
+        disabled>
+      </el-input>
+    </el-form-item>
+    <el-form-item label="Juzgado" prop="id_juzgado">
+      <el-input 
+        v-model="selectedJuzgadoName" 
+        placeholder="Juzgado del usuario"
+        disabled>
+      </el-input>
+    </el-form-item>
+    <el-form-item label="Descripción" prop="descripcion">
+      <el-input 
+        v-model="form.descripcion" 
+        type="textarea" 
+        :rows="2" 
+        placeholder="Ingrese la descripción de la reserva">
+      </el-input>
+    </el-form-item>
+    <el-form-item label="Observaciones" prop="observaciones">
+      <el-input 
+        v-model="form.observaciones" 
+        type="textarea" 
+        :rows="2" 
+        placeholder="Ingrese las observaciones de la reserva">
+      </el-input>
+    </el-form-item>
+    <el-form-item label="Fecha" prop="fecha" required>
+      <el-date-picker 
+        v-model="form.fecha" 
+        type="date" 
+        placeholder="Seleccione la fecha" 
+        format="DD-MM-YYYY" 
+        value-format="DD-MM-YYYY"
+        :disabled-date="disablePastDates"
+        @change="checkAvailableSalas">
+      </el-date-picker>
+    </el-form-item>
+    <el-form-item label="Hora Inicio" prop="hora_inicio" required>
+      <el-time-picker 
+        v-model="form.hora_inicio" 
+        format="HH:mm" 
+        value-format="HH:mm"
+        :disabled="!form.fecha"
+        placeholder="Seleccione la hora de inicio"
+        @change="checkAvailableSalas">
+      </el-time-picker>
+    </el-form-item>
+    <el-form-item label="Hora Fin" prop="hora_fin" required>
+      <el-time-picker 
+        v-model="form.hora_fin" 
+        format="HH:mm" 
+        value-format="HH:mm"
+        :disabled="!form.hora_inicio"
+        placeholder="Seleccione la hora de fin"
+        @change="checkAvailableSalas">
+      </el-time-picker>
+    </el-form-item>
+    <el-form-item label="Sala" prop="id_sala" required>
+      <el-select 
+        v-model="form.id_sala" 
+        placeholder="Seleccione la sala"
+        :disabled="!form.hora_fin || availableSalas.length === 0">
+        <el-option 
+          v-for="sala in availableSalas" 
+          :key="sala.id_sala" 
+          :label="sala.nom_sala" 
+          :value="sala.id_sala">
+        </el-option>
+      </el-select>
+      <span v-if="availableSalas.length === 0 && form.hora_fin" class="text-warning">
+        No hay salas disponibles para el horario seleccionado
+      </span>
+    </el-form-item>
+    <el-form-item label="Estado" prop="estado" required>
+      <el-select v-model="form.estado" placeholder="Seleccione el estado">
+        <el-option label="Pendiente" value="pendiente"></el-option>
+        <el-option label="Confirmada" value="confirmada"></el-option>
+        <el-option label="Cancelada" value="cancelada"></el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item>
+      <el-button type="primary" @click="submitForm" :loading="loading">Guardar</el-button>
+      <el-button @click="resetForm">Limpiar</el-button>
+    </el-form-item>
+  </el-form>
+</template>
+
 <style scoped>
 .el-form {
   max-width: 800px;
@@ -312,5 +342,12 @@ onMounted(() => {
 .el-date-picker,
 .el-time-picker {
   width: 100%;
+}
+
+.text-warning {
+  color: #e6a23c;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: block;
 }
 </style>
