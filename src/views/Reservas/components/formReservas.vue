@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, onMounted, computed, watch } from 'vue';
+import { reactive, ref, onMounted, watch } from 'vue';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
@@ -18,7 +18,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['submit', 'cancel']);
+const emit = defineEmits(['submit', 'cancel', 'updateReservas']);
 
 const form = reactive({
   id_reserva: null,
@@ -84,6 +84,7 @@ const loadInitialData = async () => {
     juzgados.value = juzgadosRes.data;
     sedes.value = sedesRes.data;
     reservas.value = reservasRes.data.data;
+    await checkAvailableSalas();
   } catch (error) {
     console.error('Error al cargar datos iniciales:', error);
     ElMessage.error('Error al cargar los datos necesarios');
@@ -100,8 +101,8 @@ const onUserChange = async (userId) => {
       const sede = sedes.value.find(s => s.id_sede === juzgado.id_sede);
       selectedSedeName.value = sede ? sede.nom_sede : '';
       selectedJuzgadoName.value = juzgado.nom_juzgado;
-      form.id_sala = null; // Limpiar la sala seleccionada al cambiar de usuario
-      await checkAvailableSalas();
+      form.id_sala = null;
+      await refreshAvailableSalas();
     }
   }
 };
@@ -110,42 +111,45 @@ const isTimeOverlap = (start1, end1, start2, end2) => {
   return (start1 < end2 && end1 > start2);
 };
 
+const refreshAvailableSalas = async () => {
+  try {
+    const response = await axios.get('http://127.0.0.1:8000/api/reservas');
+    reservas.value = response.data.data;
+    await checkAvailableSalas();
+  } catch (error) {
+    console.error('Error al actualizar las reservas:', error);
+  }
+};
+
 const checkAvailableSalas = async () => {
   if (!form.fecha || !form.hora_inicio || !form.hora_fin || !form.id_sede) {
     availableSalas.value = [];
     return;
   }
 
-  // Convertir el formato de fecha DD-MM-YYYY a YYYY-MM-DD para comparación
   const [day, month, year] = form.fecha.split('-');
   const formattedDate = `${year}-${month}-${day}`;
 
-  // Obtener todas las salas de la sede seleccionada
   const sedesSalas = salas.value.filter(sala => sala.id_sede === form.id_sede);
-
-  // Crear un mapa de salas ocupadas
   const salasOcupadas = new Map();
 
-  // Verificar cada sala individualmente
   for (const sala of sedesSalas) {
     const reservasSala = reservas.value.filter(reserva => {
-      // Ignorar reservas canceladas y la reserva actual en modo edición
       if (reserva.estado === 'cancelada' || 
           (props.formMode === 'edit' && reserva.id_reserva === form.id_reserva)) {
         return false;
       }
 
-      // Verificar si es la misma sala y fecha
-      if (reserva.id_sala === sala.id_sala && reserva.fecha === formattedDate) {
-        // Verificar solapamiento de horarios
-        return isTimeOverlap(
+      return (
+        reserva.id_sala === sala.id_sala && 
+        reserva.fecha === formattedDate &&
+        isTimeOverlap(
           form.hora_inicio,
           form.hora_fin,
           reserva.hora_inicio,
           reserva.hora_fin
-        );
-      }
-      return false;
+        )
+      );
     });
 
     if (reservasSala.length > 0) {
@@ -153,10 +157,8 @@ const checkAvailableSalas = async () => {
     }
   }
 
-  // Filtrar las salas disponibles
   availableSalas.value = sedesSalas.filter(sala => !salasOcupadas.has(sala.id_sala));
 
-  // Si la sala seleccionada ya no está disponible, limpiarla
   if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
     form.id_sala = null;
   }
@@ -171,9 +173,8 @@ const submitForm = async () => {
   
   try {
     await formRef.value.validate();
+    await refreshAvailableSalas();
     
-    // Verificar disponibilidad antes de enviar
-    await checkAvailableSalas();
     if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
       ElMessage.error('La sala seleccionada no está disponible para este horario');
       return;
@@ -181,6 +182,7 @@ const submitForm = async () => {
     
     loading.value = true;
     emit('submit', { ...form });
+    await refreshAvailableSalas();
   } catch (error) {
     console.error('Error en la validación:', error);
     ElMessage.error('Por favor, complete todos los campos requeridos correctamente');
@@ -197,7 +199,6 @@ const resetForm = () => {
   availableSalas.value = [];
 };
 
-// Watchers
 watch(() => props.initialData, (newValue) => {
   if (newValue) {
     Object.assign(form, newValue);
@@ -210,14 +211,13 @@ watch(() => props.initialData, (newValue) => {
 
 watch(
   () => [form.fecha, form.hora_inicio, form.hora_fin],
-  () => {
+  async () => {
     if (form.id_sede) {
-      checkAvailableSalas();
+      await refreshAvailableSalas();
     }
   }
 );
 
-// Montaje inicial
 onMounted(() => {
   loadInitialData();
 });
@@ -276,7 +276,7 @@ onMounted(() => {
         format="DD-MM-YYYY" 
         value-format="DD-MM-YYYY"
         :disabled-date="disablePastDates"
-        @change="checkAvailableSalas">
+        @change="refreshAvailableSalas">
       </el-date-picker>
     </el-form-item>
     <el-form-item label="Hora Inicio" prop="hora_inicio" required>
@@ -286,7 +286,7 @@ onMounted(() => {
         value-format="HH:mm"
         :disabled="!form.fecha"
         placeholder="Seleccione la hora de inicio"
-        @change="checkAvailableSalas">
+        @change="refreshAvailableSalas">
       </el-time-picker>
     </el-form-item>
     <el-form-item label="Hora Fin" prop="hora_fin" required>
@@ -296,7 +296,7 @@ onMounted(() => {
         value-format="HH:mm"
         :disabled="!form.hora_inicio"
         placeholder="Seleccione la hora de fin"
-        @change="checkAvailableSalas">
+        @change="refreshAvailableSalas">
       </el-time-picker>
     </el-form-item>
     <el-form-item label="Sala" prop="id_sala" required>
