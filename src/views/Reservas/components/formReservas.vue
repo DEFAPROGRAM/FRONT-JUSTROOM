@@ -44,6 +44,15 @@ const availableSalas = ref([]);
 const selectedSedeName = ref('');
 const selectedJuzgadoName = ref('');
 
+// Configuración de horarios permitidos
+const timePickerOptions = {
+  start: '08:00',
+  step: '00:30',
+  end: '17:00',
+  minTime: '08:00',
+  maxTime: '17:00'
+};
+
 const rules = {
   descripcion: [
     { required: false, message: 'La descripción es opcional', trigger: 'blur' }
@@ -55,10 +64,32 @@ const rules = {
     { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' }
   ],
   hora_inicio: [
-    { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' }
+    { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (value && (value < '08:00' || value > '17:00')) {
+          callback(new Error('El horario debe estar entre 8:00 AM y 5:00 PM'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'change'
+    }
   ],
   hora_fin: [
-    { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' }
+    { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (value && (value < '08:00' || value > '17:00')) {
+          callback(new Error('El horario debe estar entre 8:00 AM y 5:00 PM'));
+        } else if (value && form.hora_inicio && value <= form.hora_inicio) {
+          callback(new Error('La hora de fin debe ser mayor a la hora de inicio'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'change'
+    }
   ],
   estado: [
     { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
@@ -101,24 +132,19 @@ const onUserChange = async (userId) => {
       const sede = sedes.value.find(s => s.id_sede === juzgado.id_sede);
       selectedSedeName.value = sede ? sede.nom_sede : '';
       selectedJuzgadoName.value = juzgado.nom_juzgado;
-      form.id_sala = null;
-      await refreshAvailableSalas();
+      
+      // Mantener la sala seleccionada en modo edición
+      if (props.formMode !== 'edit') {
+        form.id_sala = null;
+      }
+      
+      await checkAvailableSalas();
     }
   }
 };
 
 const isTimeOverlap = (start1, end1, start2, end2) => {
   return (start1 < end2 && end1 > start2);
-};
-
-const refreshAvailableSalas = async () => {
-  try {
-    const response = await axios.get('http://127.0.0.1:8000/api/reservas');
-    reservas.value = response.data.data;
-    await checkAvailableSalas();
-  } catch (error) {
-    console.error('Error al actualizar las reservas:', error);
-  }
 };
 
 const checkAvailableSalas = async () => {
@@ -130,38 +156,41 @@ const checkAvailableSalas = async () => {
   const [day, month, year] = form.fecha.split('-');
   const formattedDate = `${year}-${month}-${day}`;
 
+  // Obtener todas las salas de la sede seleccionada
   const sedesSalas = salas.value.filter(sala => sala.id_sede === form.id_sede);
-  const salasOcupadas = new Map();
-
-  for (const sala of sedesSalas) {
-    const reservasSala = reservas.value.filter(reserva => {
-      if (reserva.estado === 'cancelada' || 
-          (props.formMode === 'edit' && reserva.id_reserva === form.id_reserva)) {
-        return false;
-      }
-
-      return (
-        reserva.id_sala === sala.id_sala && 
-        reserva.fecha === formattedDate &&
-        isTimeOverlap(
-          form.hora_inicio,
-          form.hora_fin,
-          reserva.hora_inicio,
-          reserva.hora_fin
-        )
-      );
-    });
-
-    if (reservasSala.length > 0) {
-      salasOcupadas.set(sala.id_sala, true);
+  
+  // En modo edición, incluir la sala actual
+  if (props.formMode === 'edit' && form.id_sala) {
+    const salaActual = sedesSalas.find(s => s.id_sala === form.id_sala);
+    if (salaActual) {
+      availableSalas.value = [salaActual];
     }
   }
 
-  availableSalas.value = sedesSalas.filter(sala => !salasOcupadas.has(sala.id_sala));
+  // Filtrar las salas ocupadas
+  const salasOcupadas = new Set();
 
-  if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
-    form.id_sala = null;
-  }
+  reservas.value.forEach(reserva => {
+    if (reserva.estado !== 'cancelada' && 
+        reserva.fecha === formattedDate &&
+        !(props.formMode === 'edit' && reserva.id_reserva === form.id_reserva)) {
+      
+      if (isTimeOverlap(
+        form.hora_inicio,
+        form.hora_fin,
+        reserva.hora_inicio,
+        reserva.hora_fin
+      )) {
+        salasOcupadas.add(reserva.id_sala);
+      }
+    }
+  });
+
+  // Actualizar salas disponibles
+  availableSalas.value = sedesSalas.filter(sala => 
+    !salasOcupadas.has(sala.id_sala) ||
+    (props.formMode === 'edit' && sala.id_sala === form.id_sala)
+  );
 };
 
 const disablePastDates = (date) => {
@@ -173,7 +202,7 @@ const submitForm = async () => {
   
   try {
     await formRef.value.validate();
-    await refreshAvailableSalas();
+    await checkAvailableSalas();
     
     if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
       ElMessage.error('La sala seleccionada no está disponible para este horario');
@@ -182,7 +211,6 @@ const submitForm = async () => {
     
     loading.value = true;
     emit('submit', { ...form });
-    await refreshAvailableSalas();
   } catch (error) {
     console.error('Error en la validación:', error);
     ElMessage.error('Por favor, complete todos los campos requeridos correctamente');
@@ -213,7 +241,7 @@ watch(
   () => [form.fecha, form.hora_inicio, form.hora_fin],
   async () => {
     if (form.id_sede) {
-      await refreshAvailableSalas();
+      await checkAvailableSalas();
     }
   }
 );
@@ -276,7 +304,7 @@ onMounted(() => {
         format="DD-MM-YYYY" 
         value-format="DD-MM-YYYY"
         :disabled-date="disablePastDates"
-        @change="refreshAvailableSalas">
+        @change="checkAvailableSalas">
       </el-date-picker>
     </el-form-item>
     <el-form-item label="Hora Inicio" prop="hora_inicio" required>
@@ -285,8 +313,9 @@ onMounted(() => {
         format="HH:mm" 
         value-format="HH:mm"
         :disabled="!form.fecha"
+        :picker-options="timePickerOptions"
         placeholder="Seleccione la hora de inicio"
-        @change="refreshAvailableSalas">
+        @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
     <el-form-item label="Hora Fin" prop="hora_fin" required>
@@ -295,8 +324,9 @@ onMounted(() => {
         format="HH:mm" 
         value-format="HH:mm"
         :disabled="!form.hora_inicio"
+        :picker-options="timePickerOptions"
         placeholder="Seleccione la hora de fin"
-        @change="refreshAvailableSalas">
+        @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
     <el-form-item label="Sala" prop="id_sala" required>
