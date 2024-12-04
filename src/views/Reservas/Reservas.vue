@@ -15,6 +15,7 @@
         <Formulario :titulo="'Formulario de Reservas'">
           <template #slotForm>
             <formReservas 
+              ref="formReservasRef"
               :initialData="currentReserva" 
               :formMode="formMode"
               :users="users" 
@@ -90,12 +91,16 @@ export default {
     const currentReserva = ref(null);
     const loading = ref(false);
     const users = ref([]);
+    const formReservasRef = ref(null);
 
     const loadReservas = async () => {
       loading.value = true;
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/reservas');
         reservas.value = response.data.data;
+        if (formReservasRef.value) {
+          formReservasRef.value.updateReservas(reservas.value);
+        }
       } catch (error) {
         console.error('Error al cargar las reservas:', error);
         ElMessage.error('Error al cargar las reservas');
@@ -129,6 +134,9 @@ export default {
         id_sede: null
       };
       dialogVisible.value = true;
+      if (formReservasRef.value) {
+        formReservasRef.value.resetForm();
+      }
     };
 
     const handleSubmit = async (formData) => {
@@ -141,6 +149,9 @@ export default {
           ElMessage.success('Reserva actualizada con éxito');
         }
         dialogVisible.value = false;
+        if (formReservasRef.value) {
+          formReservasRef.value.resetForm();
+        }
         await loadReservas();
       } catch (error) {
         if (error.response?.data?.errors) {
@@ -193,6 +204,7 @@ export default {
       });
     };
 
+
     const formatDate = (dateString) => {
       if (!dateString) return '';
       const [year, month, day] = dateString.split('-');
@@ -208,6 +220,9 @@ export default {
       dialogVisible.value = false;
       currentReserva.value = null;
       formMode.value = 'create';
+      if (formReservasRef.value) {
+        formReservasRef.value.resetForm();
+      }
       loadReservas();
     };
 
@@ -232,6 +247,7 @@ export default {
       formatDate,
       getUserFullName,
       closeDialog,
+      formReservasRef,
     };
   }
 };
@@ -269,3 +285,4 @@ export default {
   border: 1px solid #fca5a5;
 }
 </style>
+

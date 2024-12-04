@@ -159,14 +159,6 @@ const checkAvailableSalas = async () => {
   // Obtener todas las salas de la sede seleccionada
   const sedesSalas = salas.value.filter(sala => sala.id_sede === form.id_sede);
   
-  // En modo edición, incluir la sala actual
-  if (props.formMode === 'edit' && form.id_sala) {
-    const salaActual = sedesSalas.find(s => s.id_sala === form.id_sala);
-    if (salaActual) {
-      availableSalas.value = [salaActual];
-    }
-  }
-
   // Filtrar las salas ocupadas
   const salasOcupadas = new Set();
 
@@ -188,8 +180,7 @@ const checkAvailableSalas = async () => {
 
   // Actualizar salas disponibles
   availableSalas.value = sedesSalas.filter(sala => 
-    !salasOcupadas.has(sala.id_sala) ||
-    (props.formMode === 'edit' && sala.id_sala === form.id_sala)
+    !salasOcupadas.has(sala.id_sala)
   );
 };
 
@@ -210,7 +201,8 @@ const submitForm = async () => {
     }
     
     loading.value = true;
-    emit('submit', { ...form });
+    await emit('submit', { ...form });
+    resetForm(); // Llamar a resetForm aquí
   } catch (error) {
     console.error('Error en la validación:', error);
     ElMessage.error('Por favor, complete todos los campos requeridos correctamente');
@@ -222,9 +214,20 @@ const submitForm = async () => {
 const resetForm = () => {
   if (!formRef.value) return;
   formRef.value.resetFields();
-  selectedSedeName.value = '';
-  selectedJuzgadoName.value = '';
-  availableSalas.value = [];
+  form.descripcion = '';
+  form.observaciones = '';
+  form.fecha = '';
+  form.hora_inicio = '';
+  form.hora_fin = '';
+  form.estado = 'pendiente';
+  form.id_sala = null;
+  form.id_usuario = null;
+  // No reiniciamos id_sede ni id_juzgado para mantener la lógica de salas disponibles
+};
+
+const updateReservas = (newReservas) => {
+  reservas.value = newReservas;
+  checkAvailableSalas();
 };
 
 watch(() => props.initialData, (newValue) => {
@@ -234,6 +237,8 @@ watch(() => props.initialData, (newValue) => {
     if (user) {
       onUserChange(user.id);
     }
+  } else {
+    resetForm();
   }
 }, { deep: true, immediate: true });
 
@@ -249,6 +254,8 @@ watch(
 onMounted(() => {
   loadInitialData();
 });
+
+defineExpose({ resetForm, updateReservas });
 </script>
 
 <template>
@@ -381,3 +388,4 @@ onMounted(() => {
   display: block;
 }
 </style>
+
