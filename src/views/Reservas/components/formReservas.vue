@@ -1,10 +1,307 @@
+<script setup>
+import { reactive, ref, onMounted, watch } from 'vue';
+import axios from 'axios';
+import { ElMessage } from 'element-plus';
+
+const props = defineProps({
+  initialData: {
+    type: Object,
+    default: () => null,
+  },
+  formMode: {
+    type: String,
+    required: true,
+  },
+  users: {
+    type: Array,
+    required: true,
+  },
+});
+
+const emit = defineEmits(['submit', 'cancel', 'updateReservas']);
+
+const form = reactive({
+  id_reserva: null,
+  descripcion: '',
+  observaciones: '',
+  fecha: '',
+  hora_inicio: '',
+  hora_fin: '',
+  estado: 'pendiente',
+  id_sala: null,
+  id_juzgado: null,
+  id_usuario: null,
+  id_sede: null,
+});
+
+const formRef = ref(null);
+const loading = ref(false);
+const salas = ref([]);
+const juzgados = ref([]);
+const sedes = ref([]);
+const reservas = ref([]);
+const availableSalas = ref([]);
+const selectedSedeName = ref('');
+const selectedJuzgadoName = ref('');
+
+// Configuración de horarios permitidos
+const timePickerOptions = {
+  start: '08:00',
+  step: '00:30',
+  end: '17:00',
+  minTime: '08:00',
+  maxTime: '17:00'
+};
+
+const rules = {
+  descripcion: [
+    { required: false, message: 'La descripción es opcional', trigger: 'blur' }
+  ],
+  observaciones: [
+    { required: false, message: 'Las observaciones son opcionales', trigger: 'blur' }
+  ],
+  fecha: [
+    { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' }
+  ],
+  hora_inicio: [
+    { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (value && (value < '08:00' || value > '17:00')) {
+          callback(new Error('El horario debe estar entre 8:00 AM y 5:00 PM'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'change'
+    }
+  ],
+  hora_fin: [
+    { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (value && (value < '08:00' || value > '17:00')) {
+          callback(new Error('El horario debe estar entre 8:00 AM y 5:00 PM'));
+        } else if (value && form.hora_inicio && value <= form.hora_inicio) {
+          callback(new Error('La hora de fin debe ser mayor a la hora de inicio'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'change'
+    }
+  ],
+  estado: [
+    { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
+  ],
+  id_sala: [
+    { required: true, message: 'Por favor seleccione una sala', trigger: 'change' }
+  ],
+  id_usuario: [
+    { required: true, message: 'Por favor seleccione un usuario', trigger: 'change' }
+  ]
+};
+
+const loadInitialData = async () => {
+  try {
+    const [salasRes, juzgadosRes, sedesRes, reservasRes] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/salas'),
+      axios.get('http://127.0.0.1:8000/api/juzgados'),
+      axios.get('http://127.0.0.1:8000/api/sedes'),
+      axios.get('http://127.0.0.1:8000/api/reservas')
+    ]);
+
+    salas.value = salasRes.data;
+    juzgados.value = juzgadosRes.data;
+    sedes.value = sedesRes.data;
+    reservas.value = reservasRes.data.data;
+    await checkAvailableSalas();
+  } catch (error) {
+    console.error('Error al cargar datos iniciales:', error);
+    ElMessage.error('Error al cargar los datos necesarios');
+  }
+};
+
+const onUserChange = async (userId) => {
+  const selectedUser = props.users.find(user => user.id === userId);
+  if (selectedUser) {
+    form.id_juzgado = selectedUser.id_juzgado;
+    const juzgado = juzgados.value.find(j => j.id_juzgado === selectedUser.id_juzgado);
+    if (juzgado) {
+      form.id_sede = juzgado.id_sede;
+      const sede = sedes.value.find(s => s.id_sede === juzgado.id_sede);
+      selectedSedeName.value = sede ? sede.nom_sede : '';
+      selectedJuzgadoName.value = juzgado.nom_juzgado;
+      
+      // Mantener la sala seleccionada en modo edición
+      if (props.formMode !== 'edit') {
+        form.id_sala = null;
+      }
+      
+      await checkAvailableSalas();
+    }
+  }
+};
+
+const isTimeOverlap = (start1, end1, start2, end2) => {
+  return (start1 < end2 && end1 > start2);
+};
+
+const checkAvailableSalas = async () => {
+  if (!form.fecha || !form.hora_inicio || !form.hora_fin || !form.id_sede) {
+    availableSalas.value = [];
+    return;
+  }
+
+  const [day, month, year] = form.fecha.split('-');
+  const formattedDate = `${year}-${month}-${day}`;
+
+  // Obtener todas las salas de la sede seleccionada
+  const sedesSalas = salas.value.filter(sala => sala.id_sede === form.id_sede);
+  
+  // Filtrar las salas ocupadas
+  const salasOcupadas = new Set();
+
+  reservas.value.forEach(reserva => {
+    if (reserva.estado !== 'cancelada' && 
+        reserva.fecha === formattedDate &&
+        !(props.formMode === 'edit' && reserva.id_reserva === form.id_reserva)) {
+      
+      if (isTimeOverlap(
+        form.hora_inicio,
+        form.hora_fin,
+        reserva.hora_inicio,
+        reserva.hora_fin
+      )) {
+        salasOcupadas.add(reserva.id_sala);
+      }
+    }
+  });
+
+  // Actualizar salas disponibles
+  availableSalas.value = sedesSalas.filter(sala => 
+    !salasOcupadas.has(sala.id_sala)
+  );
+};
+
+const disablePastDates = (date) => {
+  return date < new Date(new Date().setHours(0, 0, 0, 0));
+};
+
+const submitForm = async () => {
+  if (!formRef.value) return;
+  
+  try {
+    await formRef.value.validate();
+    await checkAvailableSalas();
+    
+    if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
+      ElMessage.error('La sala seleccionada no está disponible para este horario');
+      return;
+    }
+    
+    loading.value = true;
+    await emit('submit', { ...form });
+    resetForm(); // Llamar a resetForm aquí
+  } catch (error) {
+    console.error('Error en la validación:', error);
+    ElMessage.error('Por favor, complete todos los campos requeridos correctamente');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const resetForm = () => {
+  if (!formRef.value) return;
+  formRef.value.resetFields();
+  form.descripcion = '';
+  form.observaciones = '';
+  form.fecha = '';
+  form.hora_inicio = '';
+  form.hora_fin = '';
+  form.estado = 'pendiente';
+  form.id_sala = null;
+  form.id_usuario = null;
+  // No reiniciamos id_sede ni id_juzgado para mantener la lógica de salas disponibles
+};
+
+const updateReservas = (newReservas) => {
+  reservas.value = newReservas;
+  checkAvailableSalas();
+};
+
+watch(() => props.initialData, (newValue) => {
+  if (newValue) {
+    Object.assign(form, newValue);
+    const user = props.users.find(u => u.id === newValue.id_usuario);
+    if (user) {
+      onUserChange(user.id);
+    }
+  } else {
+    resetForm();
+  }
+}, { deep: true, immediate: true });
+
+watch(
+  () => [form.fecha, form.hora_inicio, form.hora_fin],
+  async () => {
+    if (form.id_sede) {
+      await checkAvailableSalas();
+    }
+  }
+);
+
+onMounted(() => {
+  loadInitialData();
+});
+
+defineExpose({ resetForm, updateReservas });
+</script>
+
 <template>
   <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+    <el-form-item label="Usuario" prop="id_usuario" required>
+      <el-select 
+        v-model="form.id_usuario" 
+        placeholder="Seleccione el usuario" 
+        @change="onUserChange">
+        <el-option 
+          v-for="usuario in users" 
+          :key="usuario.id" 
+          :label="`${usuario.nombres} ${usuario.apellidos}`" 
+          :value="usuario.id">
+        </el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="Sede" prop="id_sede">
+      <el-input 
+        v-model="selectedSedeName" 
+        placeholder="Sede del usuario"
+        disabled>
+      </el-input>
+    </el-form-item>
+    <el-form-item label="Juzgado" prop="id_juzgado">
+      <el-input 
+        v-model="selectedJuzgadoName" 
+        placeholder="Juzgado del usuario"
+        disabled>
+      </el-input>
+    </el-form-item>
     <el-form-item label="Descripción" prop="descripcion">
-      <el-input v-model="form.descripcion" type="textarea" :rows="2" placeholder="Ingrese la descripción de la reserva"></el-input>
+      <el-input 
+        v-model="form.descripcion" 
+        type="textarea" 
+        :rows="2" 
+        placeholder="Ingrese la descripción de la reserva">
+      </el-input>
     </el-form-item>
     <el-form-item label="Observaciones" prop="observaciones">
-      <el-input v-model="form.observaciones" type="textarea" :rows="2" placeholder="Ingrese las observaciones de la reserva"></el-input>
+      <el-input 
+        v-model="form.observaciones" 
+        type="textarea" 
+        :rows="2" 
+        placeholder="Ingrese las observaciones de la reserva">
+      </el-input>
     </el-form-item>
     <el-form-item label="Fecha" prop="fecha" required>
       <el-date-picker 
@@ -22,6 +319,8 @@
         v-model="form.hora_inicio" 
         format="HH:mm" 
         value-format="HH:mm"
+        :disabled="!form.fecha"
+        :picker-options="timePickerOptions"
         placeholder="Seleccione la hora de inicio"
         @change="checkAvailableSalas">
       </el-time-picker>
@@ -31,61 +330,33 @@
         v-model="form.hora_fin" 
         format="HH:mm" 
         value-format="HH:mm"
+        :disabled="!form.hora_inicio"
+        :picker-options="timePickerOptions"
         placeholder="Seleccione la hora de fin"
         @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
-    <el-form-item label="Estado" prop="estado" required>
-      <el-select v-model="form.estado" placeholder="Seleccione el estado">
-        <el-option label="Pendiente" value="pendiente"></el-option>
-        <el-option label="Confirmada" value="confirmada"></el-option>
-        <el-option label="Cancelada" value="cancelada"></el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="Usuario" prop="id_usuario" required>
-      <el-select 
-        v-model="form.id_usuario" 
-        placeholder="Seleccione el usuario" 
-        @change="onUserChange">
-        <el-option 
-          v-for="usuario in users" 
-          :key="usuario.id" 
-          :label="`${usuario.nombres} ${usuario.apellidos}`" 
-          :value="usuario.id">
-        </el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="Sede" prop="id_sede" required>
-      <el-select 
-        v-model="form.id_sede" 
-        placeholder="Seleccione la sede" 
-        @change="onSedeChange">
-        <el-option 
-          v-for="sede in sedes" 
-          :key="sede.id_sede" 
-          :label="sede.nom_sede" 
-          :value="sede.id_sede">
-        </el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="Juzgado" prop="id_juzgado" required>
-      <el-select v-model="form.id_juzgado" placeholder="Seleccione el juzgado">
-        <el-option 
-          v-for="juzgado in juzgados" 
-          :key="juzgado.id_juzgado" 
-          :label="juzgado.nom_juzgado" 
-          :value="juzgado.id_juzgado">
-        </el-option>
-      </el-select>
-    </el-form-item>
     <el-form-item label="Sala" prop="id_sala" required>
-      <el-select v-model="form.id_sala" placeholder="Seleccione la sala">
+      <el-select 
+        v-model="form.id_sala" 
+        placeholder="Seleccione la sala"
+        :disabled="!form.hora_fin || availableSalas.length === 0">
         <el-option 
           v-for="sala in availableSalas" 
           :key="sala.id_sala" 
           :label="sala.nom_sala" 
           :value="sala.id_sala">
         </el-option>
+      </el-select>
+      <span v-if="availableSalas.length === 0 && form.hora_fin" class="text-warning">
+        No hay salas disponibles para el horario seleccionado
+      </span>
+    </el-form-item>
+    <el-form-item label="Estado" prop="estado" required>
+      <el-select v-model="form.estado" placeholder="Seleccione el estado">
+        <el-option label="Pendiente" value="pendiente"></el-option>
+        <el-option label="Confirmada" value="confirmada"></el-option>
+        <el-option label="Cancelada" value="cancelada"></el-option>
       </el-select>
     </el-form-item>
     <el-form-item>
@@ -95,272 +366,26 @@
   </el-form>
 </template>
 
-<script>
-import { reactive, ref, onMounted, computed, watch } from 'vue';
-import axios from 'axios';
-import { ElMessage } from 'element-plus';
-
-export default {
-  props: {
-    initialData: {
-      type: Object,
-      default: () => null,
-    },
-    formMode: {
-      type: String,
-      required: true,
-    },
-    users: {
-      type: Array,
-      required: true,
-    },
-  },
-  setup(props, { emit }) {
-    const form = reactive({
-      id_reserva: null,
-      descripcion: '',
-      observaciones: '',
-      fecha: '',
-      hora_inicio: '',
-      hora_fin: '',
-      estado: 'pendiente',
-      id_sala: null,
-      id_juzgado: null,
-      id_usuario: null,
-      id_sede: null,
-    });
-
-    const salas = ref([]);
-    const juzgados = ref([]);
-    const sedes = ref([]);
-    const loading = ref(false);
-    const reservas = ref([]);
-    const availableSalas = ref([]);
-
-    const rules = {
-      descripcion: [
-        { required: false, message: 'La descripción es opcional', trigger: 'blur' }
-      ],
-      observaciones: [
-        { required: false, message: 'Las observaciones son opcionales', trigger: 'blur' }
-      ],
-      fecha: [
-        { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' },
-        { 
-          pattern: /^\d{2}-\d{2}-\d{4}$/, 
-          message: 'Formato de fecha inválido (DD-MM-YYYY)', 
-          trigger: 'blur' 
-        }
-      ],
-      hora_inicio: [
-        { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' },
-        { pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: 'Formato de hora inválido (HH:mm)', trigger: 'blur' }
-      ],
-      hora_fin: [
-        { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' },
-        { pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: 'Formato de hora inválido (HH:mm)', trigger: 'blur' }
-      ],
-      estado: [
-        { required: true, message: 'Por favor seleccione un estado', trigger: 'change' }
-      ],
-      id_sala: [
-        { required: true, message: 'Por favor seleccione una sala', trigger: 'change' }
-      ],
-      id_juzgado: [
-        { required: true, message: 'Por favor seleccione un juzgado', trigger: 'change' }
-      ],
-      id_usuario: [
-        { required: true, message: 'Por favor seleccione un usuario', trigger: 'change' }
-      ],
-      id_sede: [
-        { required: true, message: 'Por favor seleccione una sede', trigger: 'change' }
-      ],
-    };
-
-    const formRef = ref(null);
-
-    const disablePastDates = (date) => {
-      return date < new Date(new Date().setHours(0, 0, 0, 0));
-    };
-
-    const loadReservas = async () => {
-      try {
-        const response = await axios.get('http://127.0.0.1:8000/api/reservas');
-        reservas.value = response.data.data;
-      } catch (error) {
-        console.error('Error al cargar las reservas:', error);
-        ElMessage.error('Error al cargar las reservas');
-      }
-    };
-
-    const checkAvailableSalas = async () => {
-      if (!form.fecha || !form.hora_inicio || !form.hora_fin || !form.id_sede) {
-        return;
-      }
-
-      const selectedDate = form.fecha;
-      const startTime = form.hora_inicio;
-      const endTime = form.hora_fin;
-
-      // Filtrar las salas disponibles
-      const allSalasForSede = salas.value.filter(sala => sala.id_sede === form.id_sede);
-      const reservedSalas = reservas.value.filter(reserva => {
-        // Convertir la fecha de la reserva al formato DD-MM-YYYY para comparar
-        const reservaDate = reserva.fecha.split('-').reverse().join('-');
-        
-        return (
-          reservaDate === selectedDate &&
-          reserva.estado !== 'cancelada' &&
-          ((startTime >= reserva.hora_inicio && startTime < reserva.hora_fin) ||
-           (endTime > reserva.hora_inicio && endTime <= reserva.hora_fin) ||
-           (startTime <= reserva.hora_inicio && endTime >= reserva.hora_fin))
-        );
-      }).map(reserva => reserva.id_sala);
-
-      // Filtrar las salas que no están reservadas
-      availableSalas.value = allSalasForSede.filter(
-        sala => !reservedSalas.includes(sala.id_sala)
-      );
-
-      // Si la sala seleccionada ya no está disponible, limpiarla
-      if (form.id_sala && !availableSalas.value.find(sala => sala.id_sala === form.id_sala)) {
-        form.id_sala = null;
-      }
-    };
-
-    onMounted(() => {
-      loadSalas();
-      loadJuzgados();
-      loadSedes();
-      loadReservas();
-    });
-
-    watch(() => props.initialData, (newValue) => {
-      if (newValue) {
-        Object.assign(form, newValue);
-      }
-    }, { deep: true, immediate: true });
-
-    watch(
-      () => [form.fecha, form.hora_inicio, form.hora_fin, form.id_sede],
-      () => {
-        checkAvailableSalas();
-      }
-    );
-
-    const loadSalas = async () => {
-      try {
-        const response = await axios.get('http://127.0.0.1:8000/api/salas');
-        salas.value = response.data;
-      } catch (error) {
-        console.error('Error al cargar las salas:', error);
-        ElMessage.error('Error al cargar las salas');
-      }
-    };
-
-    const loadJuzgados = async () => {
-      try {
-        const response = await axios.get('http://127.0.0.1:8000/api/juzgados');
-        juzgados.value = response.data;
-      } catch (error) {
-        console.error('Error al cargar los juzgados:', error);
-        ElMessage.error('Error al cargar los juzgados');
-      }
-    };
-
-    const loadSedes = async () => {
-      try {
-        const response = await axios.get('http://127.0.0.1:8000/api/sedes');
-        sedes.value = response.data;
-      } catch (error) {
-        console.error('Error al cargar las sedes:', error);
-        ElMessage.error('Error al cargar las sedes');
-      }
-    };
-
-    const onUserChange = (userId) => {
-      const selectedUser = props.users.find(user => user.id === userId);
-      if (selectedUser) {
-        form.id_juzgado = selectedUser.id_juzgado;
-      } else {
-        form.id_juzgado = null;
-      }
-      form.id_sede = null;
-      form.id_sala = null;
-    };
-
-    const onSedeChange = () => {
-      form.id_sala = null;
-      checkAvailableSalas();
-    };
-
-    const submitForm = async () => {
-      loading.value = true;
-      try {
-        await formRef.value.validate();
-        const formData = { ...form };
-        if (props.formMode === 'edit') {
-          formData.id_reserva = props.initialData.id_reserva;
-        }
-        console.log('Datos del formulario a enviar:', formData);
-        emit('submit', formData);
-      } catch (error) {
-        if (error.response && error.response.data.errors) {
-          const errorMessages = Object.values(error.response.data.errors).flat();
-          ElMessage.error(errorMessages.join('\n'));
-        } else if (error instanceof Error) {
-          console.error('Error al validar el formulario:', error.message);
-          ElMessage.error(`Error de validación: ${error.message}`);
-        } else {
-          console.error('Error al validar el formulario:', error);
-          ElMessage.error('Por favor, complete todos los campos requeridos correctamente.');
-        }
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    const resetForm = () => {
-      formRef.value.resetFields();
-      Object.assign(form, {
-        id_reserva: null,
-        descripcion: '',
-        observaciones: '',
-        fecha: '',
-        hora_inicio: '',
-        hora_fin: '',
-        estado: 'pendiente',
-        id_sala: null,
-        id_juzgado: null,
-        id_usuario: null,
-        id_sede: null,
-      });
-      emit('formReset');
-    };
-
-    return {
-      form,
-      salas,
-      juzgados,
-      sedes,
-      loading,
-      rules,
-      formRef,
-      onUserChange,
-      onSedeChange,
-      submitForm,
-      resetForm,
-      availableSalas,
-      disablePastDates,
-      checkAvailableSalas
-    };
-  }
-};
-</script>
-
 <style scoped>
 .el-form {
   max-width: 800px;
   margin: 20px auto;
 }
+
+.el-select {
+  width: 100%;
+}
+
+.el-date-picker,
+.el-time-picker {
+  width: 100%;
+}
+
+.text-warning {
+  color: #e6a23c;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: block;
+}
 </style>
+

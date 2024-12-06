@@ -15,11 +15,12 @@
         <Formulario :titulo="'Formulario de Reservas'">
           <template #slotForm>
             <formReservas 
+              ref="formReservasRef"
               :initialData="currentReserva" 
               :formMode="formMode"
               :users="users" 
               @submit="handleSubmit" 
-              @cancel="dialogVisible = false" 
+              @cancel="dialogVisible = false"
             />
           </template>
         </Formulario>
@@ -90,16 +91,19 @@ export default {
     const currentReserva = ref(null);
     const loading = ref(false);
     const users = ref([]);
+    const formReservasRef = ref(null);
 
     const loadReservas = async () => {
       loading.value = true;
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/reservas');
         reservas.value = response.data.data;
-        console.log('Reservas cargadas:', reservas.value);
+        if (formReservasRef.value) {
+          formReservasRef.value.updateReservas(reservas.value);
+        }
       } catch (error) {
-        console.error('Error al cargar las reservas:', error.response ? error.response.data : error.message);
-        ElMessage.error(`Error al cargar las reservas: ${error.response ? error.response.data.message : error.message}`);
+        console.error('Error al cargar las reservas:', error);
+        ElMessage.error('Error al cargar las reservas');
       } finally {
         loading.value = false;
       }
@@ -111,7 +115,7 @@ export default {
         users.value = response.data.data;
       } catch (error) {
         console.error('Error al cargar los usuarios:', error);
-        ElMessage.error('Ocurrió un error al cargar los usuarios');
+        ElMessage.error('Error al cargar los usuarios');
       }
     };
 
@@ -130,28 +134,31 @@ export default {
         id_sede: null
       };
       dialogVisible.value = true;
+      if (formReservasRef.value) {
+        formReservasRef.value.resetForm();
+      }
     };
 
     const handleSubmit = async (formData) => {
       try {
-        let response;
         if (formMode.value === 'create') {
-          response = await axios.post('http://127.0.0.1:8000/api/reservas', formData);
+          await axios.post('http://127.0.0.1:8000/api/reservas', formData);
           ElMessage.success('Reserva creada con éxito');
         } else {
-          response = await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
+          await axios.put(`http://127.0.0.1:8000/api/reservas/${formData.id_reserva}`, formData);
           ElMessage.success('Reserva actualizada con éxito');
         }
-        console.log('Respuesta del servidor:', response.data);
         dialogVisible.value = false;
+        if (formReservasRef.value) {
+          formReservasRef.value.resetForm();
+        }
         await loadReservas();
       } catch (error) {
-        if (error.response && error.response.data.errors) {
+        if (error.response?.data?.errors) {
           const errorMessages = Object.values(error.response.data.errors).flat();
           ElMessage.error(errorMessages.join('\n'));
         } else {
-          console.error('Error al procesar la reserva:', error.response ? error.response.data : error.message);
-          ElMessage.error(`Error al procesar la reserva: ${error.response ? error.response.data.message : error.message}`);
+          ElMessage.error('Error al procesar la reserva');
         }
       }
     };
@@ -172,7 +179,6 @@ export default {
         descripcion: reserva.descripcion,
         observaciones: reserva.observaciones
       };
-      console.log('Editando reserva:', currentReserva.value);
       dialogVisible.value = true;
     };
 
@@ -191,13 +197,13 @@ export default {
           ElMessage.success('Reserva eliminada con éxito');
           await loadReservas();
         } catch (error) {
-          console.error('Error al eliminar la reserva:', error);
-          ElMessage.error('Ocurrió un error al eliminar la reserva');
+          ElMessage.error('Error al eliminar la reserva');
         }
       }).catch(() => {
         ElMessage.info('Eliminación cancelada');
       });
     };
+
 
     const formatDate = (dateString) => {
       if (!dateString) return '';
@@ -214,6 +220,10 @@ export default {
       dialogVisible.value = false;
       currentReserva.value = null;
       formMode.value = 'create';
+      if (formReservasRef.value) {
+        formReservasRef.value.resetForm();
+      }
+      loadReservas();
     };
 
     onMounted(() => {
@@ -237,6 +247,7 @@ export default {
       formatDate,
       getUserFullName,
       closeDialog,
+      formReservasRef,
     };
   }
 };
@@ -274,3 +285,4 @@ export default {
   border: 1px solid #fca5a5;
 }
 </style>
+
