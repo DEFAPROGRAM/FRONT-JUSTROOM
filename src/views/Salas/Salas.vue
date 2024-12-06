@@ -42,7 +42,7 @@
 import { ref, onMounted, computed } from 'vue'
 import LayoutMain from '../../components/LayoutMain.vue'
 import Formulario from '../../components/Formulario.vue'
-import FormSalas from './components/formSalas.vue'
+import formSalas from './components/formSalas.vue'
 import Header from '../../components/Header.vue'
 import { Delete, Edit } from "@element-plus/icons-vue"
 import { ElMessageBox, ElMessage } from 'element-plus'

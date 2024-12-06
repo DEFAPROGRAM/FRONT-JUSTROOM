@@ -41,7 +41,7 @@
 import { ref, onMounted, computed } from 'vue'
 import LayoutMain from '../../components/LayoutMain.vue'
 import Formulario from '../../components/Formulario.vue'
-import FormJuzgados from './components/FormJuzgados.vue'
+import formJuzgados from './components/formJuzgados.vue'
 import Header from '../../components/Header.vue'
 import { Delete, Edit } from "@element-plus/icons-vue"
 import { ElMessageBox, ElMessage } from 'element-plus'
