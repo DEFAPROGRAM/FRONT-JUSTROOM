@@ -1,5 +1,7 @@
 {
     "require": {
+        "php": "^8.2",
         "nesbot/carbon": "^3.8"
     }
+    
 }
