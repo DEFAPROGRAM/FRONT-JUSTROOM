@@ -23,10 +23,33 @@
       <el-input v-model="form.email" placeholder="Ingrese el email"></el-input>
     </el-form-item>
     <el-form-item v-if="formMode === 'edit'" label="Cambiar contraseña">
-      <el-checkbox v-model="changePassword">Cambiar contraseña</el-checkbox>
+      <el-checkbox v-model="changePassword">¿Desea cambiar la contraseña?</el-checkbox>
     </el-form-item>
-    <el-form-item label="Contraseña" prop="password" v-if="formMode === 'create' || changePassword">
-      <el-input v-model="form.password" type="password" placeholder="Ingrese la contraseña"></el-input>
+    <el-form-item 
+      label="Contraseña" 
+      prop="password" 
+      v-if="formMode === 'create' || changePassword"
+      :rules="passwordRules"
+    >
+      <el-input 
+        v-model="form.password" 
+        type="password" 
+        placeholder="Ingrese la contraseña"
+        show-password
+      ></el-input>
+    </el-form-item>
+    <el-form-item 
+      label="Confirmar" 
+      prop="confirmPassword" 
+      v-if="formMode === 'create' || changePassword"
+      :rules="confirmPasswordRules"
+    >
+      <el-input 
+        v-model="form.confirmPassword" 
+        type="password" 
+        placeholder="Confirme la contraseña"
+        show-password
+      ></el-input>
     </el-form-item>
     <el-form-item label="Rol" prop="rol">
       <el-select v-model="form.rol" placeholder="Seleccione el rol">
@@ -55,6 +78,7 @@ interface User {
   id_juzgado: number;
   email: string;
   password?: string;
+  confirmPassword?: string;
   rol: string;
 }
 
@@ -90,6 +114,7 @@ const form = reactive<User>({
   id_juzgado: 0,
   email: '',
   password: '',
+  confirmPassword: '',
   rol: ''
 })
 
@@ -121,14 +146,52 @@ const rules: FormRules = {
     { required: true, message: 'Por favor ingrese el email', trigger: 'blur' },
     { type: 'email', message: 'Por favor ingrese un email válido', trigger: 'blur' }
   ],
-  password: [
-    { required: true, message: 'Por favor ingrese la contraseña', trigger: 'blur' },
-    { min: 8, message: 'La contraseña debe tener al menos 8 caracteres', trigger: 'blur' }
-  ],
   rol: [
     { required: true, message: 'Por favor seleccione el rol', trigger: 'change' }
   ]
 }
+
+// Reglas dinámicas para la contraseña
+const passwordRules = computed(() => {
+  const rules = [
+    { min: 8, message: 'La contraseña debe tener al menos 8 caracteres', trigger: 'blur' },
+    { 
+      pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/,
+      message: 'La contraseña debe contener al menos una mayúscula, una minúscula y un número',
+      trigger: 'blur'
+    }
+  ]
+
+  // Solo agregar la regla required si es modo crear o si se está cambiando la contraseña
+  if (props.formMode === 'create' || changePassword.value) {
+    rules.unshift({ required: true, message: 'Por favor ingrese la contraseña', trigger: 'blur' })
+  }
+
+  return rules
+})
+
+// Reglas dinámicas para la confirmación de contraseña
+const confirmPasswordRules = computed(() => {
+  const rules = [
+    {
+      validator: (rule: any, value: string, callback: Function) => {
+        if (value !== form.password) {
+          callback(new Error('Las contraseñas no coinciden'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+
+  // Solo agregar la regla required si es modo crear o si se está cambiando la contraseña
+  if (props.formMode === 'create' || changePassword.value) {
+    rules.unshift({ required: true, message: 'Por favor confirme la contraseña', trigger: 'blur' })
+  }
+
+  return rules
+})
 
 const onSedeChange = () => {
   form.id_juzgado = 0
@@ -138,6 +201,7 @@ watch(() => props.initialData, (newData) => {
   if (newData) {
     Object.assign(form, newData)
     form.password = ''
+    form.confirmPassword = ''
   } else {
     resetForm()
   }
@@ -145,23 +209,32 @@ watch(() => props.initialData, (newData) => {
 
 const submitForm = async () => {
   if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (valid) {
-      const formData = { ...form }
-      if (props.formMode === 'edit' && !changePassword.value) {
-        delete formData.password
-      }
-      emit('submit', formData)
-    } else {
-      console.error('Error en el formulario')
+  
+  try {
+    await formRef.value.validate()
+    const formData = { ...form }
+    
+    // Eliminar campos de contraseña si no es necesario
+    if (props.formMode === 'edit' && !changePassword.value) {
+      delete formData.password
+      delete formData.confirmPassword
     }
-  })
+    
+    // Siempre eliminar confirmPassword antes de enviar
+    delete formData.confirmPassword
+    
+    emit('submit', formData)
+  } catch (error) {
+    console.error('Error en la validación del formulario:', error)
+  }
 }
 
 const resetForm = () => {
   if (!formRef.value) return
   formRef.value.resetFields()
   changePassword.value = false
+  form.password = ''
+  form.confirmPassword = ''
 }
 
 const loadSedes = async () => {
@@ -188,6 +261,7 @@ onMounted(() => {
   if (props.initialData) {
     Object.assign(form, props.initialData)
     form.password = ''
+    form.confirmPassword = ''
   } else {
     resetForm()
   }

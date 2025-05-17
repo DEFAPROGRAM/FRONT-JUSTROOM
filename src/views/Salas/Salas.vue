@@ -1,48 +1,40 @@
 <template>
-  <LayoutMain>
-    <template #slotLayout>
-      <Header 
-        :titulo="'Salas'"
-        :tituloBoton="'Crear Salas'"
-        @click="showForm"
+  <div>
+    <Header 
+      :titulo="'Salas'"
+      :tituloBoton="'Crear Salas'"
+      @click="showForm"
+    />
+    <el-dialog
+      v-model="dialogVisible"
+      :title="formMode === 'create' ? 'Crear Nueva Sala' : 'Editar Sala'"
+      width="50%"
+    >
+      <FormSalas 
+        :initialData="currentSala" 
+        :sedes="sedes" 
+        @submit="handleSubmit" 
+        @cancel="dialogVisible = false" 
       />
-      <el-dialog
-        v-model="dialogVisible"
-        :title="formMode === 'create' ? 'Crear Nueva Sala' : 'Editar Sala'"
-        width="50%"
-      >
-        <Formulario :titulo="'Formulario de Salas'">
-          <template #slotForm>
-            <FormSalas 
-              :initialData="currentSala" 
-              :sedes="sedes" 
-              @submit="handleSubmit" 
-              @cancel="dialogVisible = false" 
-            />
-          </template>
-        </Formulario>
-      </el-dialog>
-      
-      <el-table :data="salasConSedes" style="width: 100%" v-loading="loading">
-        <el-table-column prop="nom_sala" label="Sala" />
-        <el-table-column prop="capacidad" label="Capacidad" />
-        <el-table-column prop="nom_sede" label="Sede" />
-        <el-table-column label="Acciones" width="200">
-          <template #default="scope">
-            <el-button type="primary" :icon="Edit" @click="editSala(scope.row)" />
-            <el-button type="danger" :icon="Delete" @click="deleteSala(scope.row)" />
-          </template>
-        </el-table-column>
-      </el-table>
-    </template>
-  </LayoutMain>
+    </el-dialog>
+    
+    <el-table :data="salasConSedes" style="width: 100%" v-loading="loading">
+      <el-table-column prop="nom_sala" label="Sala" />
+      <el-table-column prop="capacidad" label="Capacidad" />
+      <el-table-column prop="nom_sede" label="Sede" />
+      <el-table-column label="Acciones" width="200">
+        <template #default="scope">
+          <el-button type="primary" :icon="Edit" @click="editSala(scope.row)" />
+          <el-button type="danger" :icon="Delete" @click="deleteSala(scope.row)" />
+        </template>
+      </el-table-column>
+    </el-table>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import LayoutMain from '../../components/LayoutMain.vue'
-import Formulario from '../../components/Formulario.vue'
-import formSalas from './components/formSalas.vue'
+import FormSalas from './components/formSalas.vue'
 import Header from '../../components/Header.vue'
 import { Delete, Edit } from "@element-plus/icons-vue"
 import { ElMessageBox, ElMessage } from 'element-plus'
