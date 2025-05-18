@@ -180,11 +180,7 @@ export default {
 
         stats.value = {
           salas: salasRes.data.length || 0,
-<<<<<<< HEAD
           reservas: reservasRes.data.data?.length || 0,
-=======
-          reservas: reservasRes.data.length || 0,
->>>>>>> d40af07fb4a6dc75182023493d4407b3ac87cd0f
           sedes: sedesRes.data.length || 0,
           juzgados: juzgadosRes.data.length || 0,
           usuarios: usersRes.data.data?.length || 0
