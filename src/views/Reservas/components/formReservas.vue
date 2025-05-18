@@ -368,16 +368,16 @@ defineExpose({ resetForm, updateReservas });
 
 <style scoped>
 .el-form {
-  max-width: 800px;
-  margin: 20px auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 20px;
+  overflow-x: hidden;
 }
 
-.el-select {
-  width: 100%;
-}
-
+.el-select,
 .el-date-picker,
-.el-time-picker {
+.el-time-picker,
+.el-input {
   width: 100%;
 }
 
@@ -386,6 +386,43 @@ defineExpose({ resetForm, updateReservas });
   font-size: 0.875rem;
   margin-top: 0.5rem;
   display: block;
+}
+
+:deep(.el-dialog) {
+  margin: 0 !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 90vh;
+  width: 50% !important;
+}
+
+:deep(.el-dialog__body) {
+  padding: 0;
+  max-height: calc(90vh - 120px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+:deep(.el-textarea__inner) {
+  min-height: 80px !important;
+}
+
+:deep(.el-dialog__header) {
+  padding: 20px;
+  margin: 0;
+  border-bottom: 1px solid #dcdfe6;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 20px;
+  margin: 0;
+  border-top: 1px solid #dcdfe6;
 }
 </style>
 

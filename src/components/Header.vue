@@ -2,7 +2,7 @@
     <div class="container">
         
         <div class="container_header">
-            <h2 class="titulo">Modulo de {{titulo}}</h2>
+            <h2 class="titulo">{{titulo}}</h2>
             <el-row justify="center" align="middle">
                 <el-button type="primary">{{ tituloBoton }}</el-button>
     
@@ -39,6 +39,12 @@ defineProps({
     padding: 0px;
 }
 
-
+.titulo {
+    font-size: 1.5rem;
+    color: #606266;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
 
 </style>
