@@ -9,13 +9,10 @@
       v-model="dialogVisible"
       :title="formMode === 'create' ? 'Crear Nueva Reserva' : 'Editar Reserva'"
       width="50%"
-<<<<<<< HEAD
       :modal="true"
       :close-on-click-modal="false"
       :append-to-body="true"
       class="custom-dialog"
-=======
->>>>>>> d40af07fb4a6dc75182023493d4407b3ac87cd0f
     >
       <Formulario :titulo="'Formulario de Reservas'">
         <template #slotForm>
