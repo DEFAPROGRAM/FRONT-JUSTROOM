@@ -74,8 +74,8 @@ interface User {
   nombres: string;
   apellidos: string;
   cargo: string;
-  id_sede: number;
-  id_juzgado: number;
+  id_sede?: number | null;
+  id_juzgado?: number | null;
   email: string;
   password?: string;
   confirmPassword?: string;
@@ -110,8 +110,8 @@ const form = reactive<User>({
   nombres: '',
   apellidos: '',
   cargo: '',
-  id_sede: 0,
-  id_juzgado: 0,
+  id_sede: null,
+  id_juzgado: null,
   email: '',
   password: '',
   confirmPassword: '',
@@ -125,29 +125,29 @@ const filteredJuzgados = computed(() => {
 
 const rules: FormRules = {
   nombres: [
-    { required: true, message: 'Por favor ingrese los nombres', trigger: 'blur' },
-    { max: 50, message: 'Los nombres no deben exceder los 50 caracteres', trigger: 'blur' }
+    { required: true, message: 'Por favor ingrese los nombres', trigger: 'submit' },
+    { max: 50, message: 'Los nombres no deben exceder los 50 caracteres', trigger: 'submit' }
   ],
   apellidos: [
-    { required: true, message: 'Por favor ingrese los apellidos', trigger: 'blur' },
-    { max: 50, message: 'Los apellidos no deben exceder los 50 caracteres', trigger: 'blur' }
+    { required: true, message: 'Por favor ingrese los apellidos', trigger: 'submit' },
+    { max: 50, message: 'Los apellidos no deben exceder los 50 caracteres', trigger: 'submit' }
   ],
   cargo: [
-    { required: true, message: 'Por favor ingrese el cargo', trigger: 'blur' },
-    { max: 50, message: 'El cargo no debe exceder los 50 caracteres', trigger: 'blur' }
+    { required: true, message: 'Por favor ingrese el cargo', trigger: 'submit' },
+    { max: 50, message: 'El cargo no debe exceder los 50 caracteres', trigger: 'submit' }
   ],
   id_sede: [
-    { required: true, message: 'Por favor seleccione la sede', trigger: 'change' }
+    { required: true, message: 'Por favor seleccione la sede', trigger: 'submit' }
   ],
   id_juzgado: [
-    { required: true, message: 'Por favor seleccione el juzgado', trigger: 'change' }
+    { required: true, message: 'Por favor seleccione el juzgado', trigger: 'submit' }
   ],
   email: [
-    { required: true, message: 'Por favor ingrese el email', trigger: 'blur' },
-    { type: 'email', message: 'Por favor ingrese un email válido', trigger: 'blur' }
+    { required: true, message: 'Por favor ingrese el email', trigger: 'submit' },
+    { type: 'email', message: 'Por favor ingrese un email válido', trigger: 'submit' }
   ],
   rol: [
-    { required: true, message: 'Por favor seleccione el rol', trigger: 'change' }
+    { required: true, message: 'Por favor seleccione el rol', trigger: 'submit' }
   ]
 }
 
@@ -194,7 +194,7 @@ const confirmPasswordRules = computed(() => {
 })
 
 const onSedeChange = () => {
-  form.id_juzgado = 0
+  form.id_juzgado = null
 }
 
 watch(() => props.initialData, (newData) => {
@@ -231,10 +231,18 @@ const submitForm = async () => {
 
 const resetForm = () => {
   if (!formRef.value) return
-  formRef.value.resetFields()
-  changePassword.value = false
+  
+  formRef.value.clearValidate()
+  form.nombres = ''
+  form.apellidos = ''
+  form.cargo = ''
+  form.id_sede = null
+  form.id_juzgado = null
+  form.email = ''
   form.password = ''
   form.confirmPassword = ''
+  form.rol = ''
+  changePassword.value = false
 }
 
 const loadSedes = async () => {

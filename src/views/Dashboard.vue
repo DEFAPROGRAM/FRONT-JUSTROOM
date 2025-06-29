@@ -1,61 +1,62 @@
 <template>
   <div class="dashboard-container">
     <!-- Sidebar con accesos rápidos -->
-    <div class="quick-access-sidebar">
+    <div class="quick-access-sidebar" style="background-color: #4A708B;">
       <div class="logo-container mb-4">
         <img :src="logoUrl" alt="JUSTROOM Logo" class="logo-img">
       </div>
-      <h5 class="sidebar-title">
+      <h5 class="sidebar-title" style="color: black; font-weight: bold;">
         <i class="fas fa-tasks me-2"></i>Accesos Rápidos
       </h5>
-      <div class="sidebar-links">
-        <a href="#" class="sidebar-link" @click.prevent="currentModule = null">
-          <i class="fas fa-home fa-lg"></i>
-          <span>Inicio</span>
+      <div class="sidebar-links" style="color: black;">
+        <a href="#" class="sidebar-link" @click.prevent="currentModule = null" style="font-weight: bold;">
+          <i class="fas fa-home fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Inicio</span>
         </a>
         <a href="#" class="sidebar-link" @click.prevent="showModule('sedes')">
-          <i class="fas fa-building fa-lg"></i>
-          <span>Administrar Sedes</span>
+          <i class="fas fa-building fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Administrar Sedes</span>
         </a>
         <a href="#" class="sidebar-link" @click.prevent="showModule('juzgados')">
-          <i class="fas fa-gavel fa-lg"></i>
-          <span>Administrar Juzgados</span>
+          <i class="fas fa-gavel fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Administrar Juzgados</span>
         </a>
         <a href="#" class="sidebar-link" @click.prevent="showModule('salas')">
-          <i class="fas fa-door-closed fa-lg"></i>
-          <span>Administrar Salas</span>
+          <i class="fas fa-door-closed fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Administrar Salas</span>
         </a>
         <a href="#" class="sidebar-link" @click.prevent="showModule('reservas')">
-          <i class="fas fa-calendar-plus fa-lg"></i>
-          <span>Gestionar Reservas</span>
+          <i class="fas fa-calendar-plus fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Gestionar Reservas</span>
         </a>
         <a href="#" class="sidebar-link" @click.prevent="showModule('reportes')">
-          <i class="fas fa-chart-bar fa-lg"></i>
-          <span>Reportes</span>
+          <i class="fas fa-chart-bar fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Reportes</span>
         </a>
         <a href="#" class="sidebar-link" @click.prevent="showModule('users')">
-          <i class="fas fa-users fa-lg"></i>
-          <span>Usuarios</span>
+          <i class="fas fa-users fa-lg" style="color: black; font-weight: bold;"></i>
+          <span style="color: black; font-weight: bold;">Usuarios</span>
         </a>
       </div>
     </div>
 
     <!-- Contenido principal -->
-    <div class="main-content">
-      <div class="card shadow-sm border-0">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-          <h3 class="mb-0 text-primary">
-            <i class="fas fa-user me-2"></i>
-            Bienvenido, {{ userName }}
-          </h3>
-          <button @click="logout" class="btn btn-danger d-flex align-items-center">
-            <i class="fas fa-sign-out-alt me-2"></i>
+    <div class="main-content" style="background: linear-gradient(rgba(76, 180, 255, 0.1), rgba(76, 180, 255, 0.1)), url('/src/assets/sala.jpg'); background-size: cover; background-position: center; min-height: 100vh; position: relative;">
+      <div class="overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(76, 180, 255, 0.05);"></div>
+      <div class="card shadow-sm border-0" style="background-color: #87CEEB; position: relative; z-index: 1;">
+        <div class="card-header" style="background-color: #87CEEB; color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <i class="fas fa-user me-2" style="color: white;"></i>
+            <span style="color: white; font-size: 1.25rem; font-weight: bold;">Bienvenido, {{ userName }}</span>
+          </div>
+          <button @click="logout" class="btn" style="background-color: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fas fa-sign-out-alt me-2" style="color: white;"></i>
             Cerrar Sesión
           </button>
         </div>
         <div class="card-body">
           <!-- Contadores -->
-          <div v-if="!currentModule" class="row g-4">
+          <div v-if="!currentModule" class="row g-4" style="background-color: #87CEEB; padding: 20px; border-radius: 10px;">
             <!-- Reservas -->
             <div class="col">
               <div class="card bg-success text-white shadow-sm h-100">
@@ -80,7 +81,7 @@
             </div>
             <!-- Sedes -->
             <div class="col">
-              <div class="card bg-info text-white shadow-sm h-100">
+              <div class="card" style="background-color: #dc3545; color: white; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 100%;">
                 <div class="card-body">
                   <h5 class="card-title">
                     <i class="fas fa-building me-2"></i>Sedes
@@ -127,10 +128,10 @@
 </template>
 
 <script>
-import { ref, onMounted, defineAsyncComponent, computed } from 'vue'
+import { ref, onMounted, defineAsyncComponent, computed, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import logoUrl from '../assets/JUSTROOM.png'
+const logoUrl = new URL('../assets/JUSTROOM.png', import.meta.url).href
 
 // Importación dinámica de componentes
 const Sedes = defineAsyncComponent(() => import('./Sedes/Sedes.vue'))
@@ -138,6 +139,7 @@ const Juzgados = defineAsyncComponent(() => import('./Juzgados/Juzgados.vue'))
 const Salas = defineAsyncComponent(() => import('./Salas/Salas.vue'))
 const Reservas = defineAsyncComponent(() => import('./Reservas/Reservas.vue'))
 const Users = defineAsyncComponent(() => import('./Users/Users.vue'))
+const Reportes = defineAsyncComponent(() => import('./Reportes/Reportes.vue'))
 
 export default {
   name: 'Dashboard',
@@ -146,7 +148,8 @@ export default {
     Juzgados,
     Salas,
     Reservas,
-    Users
+    Users,
+    Reportes
   },
   setup() {
     const router = useRouter()
@@ -190,6 +193,45 @@ export default {
       }
     }
 
+    // Función para actualizar estadísticas específicas
+    const updateStats = async (type) => {
+      try {
+        const token = localStorage.getItem('token')
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+
+        let response
+        switch(type) {
+          case 'salas':
+            response = await axios.get('http://127.0.0.1:8000/api/salas')
+            stats.value.salas = response.data.length || 0
+            break
+          case 'reservas':
+            response = await axios.get('http://127.0.0.1:8000/api/reservas')
+            stats.value.reservas = response.data.data?.length || 0
+            break
+          case 'sedes':
+            response = await axios.get('http://127.0.0.1:8000/api/sedes')
+            stats.value.sedes = response.data.length || 0
+            break
+          case 'juzgados':
+            response = await axios.get('http://127.0.0.1:8000/api/juzgados')
+            stats.value.juzgados = response.data.length || 0
+            break
+          case 'usuarios':
+            response = await axios.get('http://127.0.0.1:8000/api/users')
+            stats.value.usuarios = response.data.data?.length || 0
+            break
+          default:
+            await fetchStats()
+        }
+      } catch (error) {
+        console.error('Error al actualizar estadísticas:', error)
+      }
+    }
+
+    // Proporcionar la función updateStats a los componentes hijos
+    provide('updateStats', updateStats)
+
     const showModule = (moduleName) => {
       switch(moduleName) {
         case 'sedes':
@@ -207,8 +249,13 @@ export default {
         case 'users':
           currentModule.value = Users
           break
+        case 'reportes':
+          currentModule.value = Reportes
+          break
         default:
           currentModule.value = null
+          // Actualizar estadísticas cuando se regresa al dashboard
+          fetchStats()
       }
     }
 
@@ -231,6 +278,8 @@ export default {
           return 'Reservas'
         case Users:
           return 'Usuarios'
+        case Reportes:
+          return 'Reportes'
         default:
           return ''
       }
@@ -248,7 +297,8 @@ export default {
       showModule,
       getTitulo,
       userName,
-      logoUrl
+      logoUrl,
+      updateStats
     }
   }
 }

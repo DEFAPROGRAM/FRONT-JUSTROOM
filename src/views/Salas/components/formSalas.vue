@@ -54,20 +54,20 @@ const loading = ref(false)
 const form = reactive<Sala>({
   nom_sala: '',
   capacidad: 0,
-  id_sede: undefined,
+  id_sede: null,
 })
 
 const rules: FormRules = {
   nom_sala: [
-    { required: true, message: 'Por favor ingrese el nombre de la Sala', trigger: 'blur' },
-    { min: 3, max: 50, message: 'El nombre debe tener entre 3 y 50 caracteres', trigger: 'blur' }
+    { required: true, message: 'Por favor ingrese el nombre de la Sala', trigger: 'submit' },
+    { min: 3, max: 50, message: 'El nombre debe tener entre 3 y 50 caracteres', trigger: 'submit' }
   ],
   capacidad: [
-    { required: true, message: 'Por favor ingrese la Capacidad de la Sala', trigger: 'blur' },
-    { type: 'number', min: 10, max: 50, message: 'La capacidad debe tener entre 10 y 50 personas', trigger: 'blur' }
+    { required: true, message: 'Por favor ingrese la Capacidad de la Sala', trigger: 'submit' },
+    { type: 'number', min: 10, max: 50, message: 'La capacidad debe tener entre 10 y 50 personas', trigger: 'submit' }
   ],
   id_sede: [
-    { required: true, message: 'Por favor seleccione una sede', trigger: 'change' }
+    { required: true, message: 'Por favor seleccione una sede', trigger: 'submit' }
   ]
 }
 
@@ -81,21 +81,31 @@ watch(() => props.initialData, (newData) => {
   } else {
     resetForm()
   }
-})
+}, { immediate: true })
 
 const submitForm = async () => {
-  await formRef.value?.validate()
-  emit('submit', { ...form })
+  if (!formRef.value) return
+  
+  try {
+    await formRef.value.validate()
+    emit('submit', { ...form })
+  } catch (error) {
+    console.error('Error en la validación:', error)
+  }
 }
 
 const resetForm = () => {
+  if (!formRef.value) return
+  
+  formRef.value.clearValidate()
   form.nom_sala = ''
   form.capacidad = 0
-  form.id_sede = undefined
+  form.id_sede = null
+  form.id_sala = undefined
 }
 
 onMounted(() => {
-  // Cualquier inicialización adicional que se necesite
+  resetForm()
 })
 </script>
 

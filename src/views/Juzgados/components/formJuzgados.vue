@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref, defineProps, defineEmits, watch } from 'vue';
 
 interface FormData {
   nom_juzgado: string;
@@ -44,14 +44,33 @@ const emit = defineEmits<{
 }>();
 
 const formData = ref<FormData>({ 
-  nom_juzgado: props.initialData.nom_juzgado || '', 
-  id_sede: props.initialData.id_sede 
+  nom_juzgado: '', 
+  id_sede: null
 });
 
-const submitForm = () => {
-  // Emite el evento con los datos del formulario
-  emit('submit', { ...formData.value });
+const resetForm = () => {
+  formData.value = {
+    nom_juzgado: '',
+    id_sede: null
+  };
 };
+
+const submitForm = () => {
+  emit('submit', { ...formData.value });
+  resetForm();
+};
+
+// Observar cambios en initialData
+watch(() => props.initialData, (newData) => {
+  if (newData) {
+    formData.value = {
+      nom_juzgado: newData.nom_juzgado || '',
+      id_sede: newData.id_sede || null
+    };
+  } else {
+    resetForm();
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>

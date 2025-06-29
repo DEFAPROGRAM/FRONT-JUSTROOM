@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import Formulario from '../../components/Formulario.vue'
 import FormUsers from './components/FormUsers.vue'
 import Header from '../../components/Header.vue'
@@ -80,6 +80,9 @@ const juzgados = ref<Juzgado[]>([])
 const formMode = ref<'create' | 'edit'>('create')
 const currentUser = ref<User | null>(null)
 const loading = ref(false)
+
+// Obtener la función updateStats del componente padre
+const updateStats = inject('updateStats')
 
 const usersConDetalles = computed(() => {
   return users.value.map(user => ({
@@ -128,8 +131,8 @@ const showForm = () => {
     nombres: '', 
     apellidos: '', 
     cargo: '', 
-    id_sede: 0,
-    id_juzgado: 0,
+    id_sede: null,
+    id_juzgado: null,
     email: '',
     rol: ''
   }
@@ -147,6 +150,10 @@ const handleSubmit = async (formData: User) => {
     }
     dialogVisible.value = false
     await loadUsers()
+    // Actualizar estadísticas del dashboard
+    if (updateStats) {
+      await updateStats('usuarios')
+    }
   } catch (error) {
     console.error('Error al procesar el usuario:', error)
     ElMessage.error('Ocurrió un error al procesar el usuario')
@@ -173,6 +180,10 @@ const deleteUser = (user: User) => {
       await axios.delete(`http://127.0.0.1:8000/api/users/${user.id}`)
       ElMessage.success('Usuario eliminado con éxito')
       await loadUsers()
+      // Actualizar estadísticas del dashboard
+      if (updateStats) {
+        await updateStats('usuarios')
+      }
     } catch (error) {
       console.error('Error al eliminar el usuario:', error)
       ElMessage.error('Ocurrió un error al eliminar el usuario')

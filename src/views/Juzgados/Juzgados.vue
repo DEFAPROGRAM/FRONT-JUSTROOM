@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import Formulario from '../../components/Formulario.vue'
 import FormJuzgados from './components/FormJuzgados.vue'
 import Header from '../../components/Header.vue'
@@ -66,8 +66,11 @@ const dialogVisible = ref(false)
 const juzgados = ref<Juzgado[]>([])
 const sedes = ref<Sede[]>([])
 const formMode = ref<'create' | 'edit'>('create')
-const currentJuzgado = ref<Juzgado>({ id_juzgado: 0, nom_juzgado: '', id_sede: undefined })
+const currentJuzgado = ref<Juzgado>({ id_juzgado: 0, nom_juzgado: '', id_sede: null })
 const loading = ref(false)
+
+// Obtener la función updateStats del componente padre
+const updateStats = inject('updateStats')
 
 const juzgadosConSedes = computed(() => {
   return juzgados.value.map(juzgado => ({
@@ -101,7 +104,7 @@ const loadSedes = async () => {
 
 const showForm = () => {
   formMode.value = 'create'
-  currentJuzgado.value = { id_juzgado: 0, nom_juzgado: '', id_sede: undefined }
+  currentJuzgado.value = { id_juzgado: 0, nom_juzgado: '', id_sede: null }
   dialogVisible.value = true
 }
 
@@ -115,7 +118,12 @@ const handleSubmit = async (formData: FormData) => {
       ElMessage.success('Juzgado actualizado con éxito')
     }
     dialogVisible.value = false
+    currentJuzgado.value = { id_juzgado: 0, nom_juzgado: '', id_sede: null }
     await loadJuzgados()
+    // Actualizar estadísticas del dashboard
+    if (updateStats) {
+      await updateStats('juzgados')
+    }
   } catch (error) {
     console.error('Error al procesar los Juzgados:', error)
     ElMessage.error('Ocurrió un error al procesar el Juzgado')
@@ -142,6 +150,10 @@ const deleteJuzgado = (juzgado: Juzgado) => {
       await axios.delete(`http://127.0.0.1:8000/api/juzgados/${juzgado.id_juzgado}`)
       ElMessage.success('Juzgado eliminado con éxito')
       await loadJuzgados()
+      // Actualizar estadísticas del dashboard
+      if (updateStats) {
+        await updateStats('juzgados')
+      }
     } catch (error) {
       console.error('Error al eliminar el Juzgado:', error)
       ElMessage.error('Ocurrió un error al eliminar el Juzgado')

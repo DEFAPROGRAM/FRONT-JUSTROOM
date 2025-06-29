@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import FormSalas from './components/formSalas.vue'
 import Header from '../../components/Header.vue'
 import { Delete, Edit } from "@element-plus/icons-vue"
@@ -60,8 +60,11 @@ const dialogVisible = ref(false)
 const salas = ref<Sala[]>([])
 const sedes = ref<Sede[]>([])
 const formMode = ref<'create' | 'edit'>('create')
-const currentSala = ref<Sala>({ nom_sala: '', capacidad: 0, id_sede: undefined })
+const currentSala = ref<Sala>({ nom_sala: '', capacidad: 0, id_sede: null })
 const loading = ref(false)
+
+// Obtener la función updateStats del componente padre
+const updateStats = inject('updateStats')
 
 const salasConSedes = computed(() => {
   return salas.value.map(sala => ({
@@ -95,7 +98,7 @@ const loadSedes = async () => {
 
 const showForm = () => {
   formMode.value = 'create'
-  currentSala.value = { nom_sala: '', capacidad: 0, id_sede: undefined }
+  currentSala.value = { nom_sala: '', capacidad: 0, id_sede: null }
   dialogVisible.value = true
 }
 
@@ -110,6 +113,10 @@ const handleSubmit = async (formData: Sala) => {
     }
     dialogVisible.value = false
     await loadSalas()
+    // Actualizar estadísticas del dashboard
+    if (updateStats) {
+      await updateStats('salas')
+    }
   } catch (error) {
     console.error('Error al procesar las Salas:', error)
     ElMessage.error('Ocurrió un error al procesar la Sala')
@@ -136,6 +143,10 @@ const deleteSala = (sala: Sala) => {
       await axios.delete(`http://127.0.0.1:8000/api/salas/${sala.id_sala}`)
       ElMessage.success('Sala eliminada con éxito')
       await loadSalas()
+      // Actualizar estadísticas del dashboard
+      if (updateStats) {
+        await updateStats('salas')
+      }
     } catch (error) {
       console.error('Error al eliminar la Sala:', error)
       ElMessage.error('Ocurrió un error al eliminar la Sala')

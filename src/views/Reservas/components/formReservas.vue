@@ -50,7 +50,22 @@ const timePickerOptions = {
   step: '00:30',
   end: '17:00',
   minTime: '08:00',
-  maxTime: '17:00'
+  maxTime: '17:00',
+  format: 'HH:mm',
+  valueFormat: 'HH:mm',
+  selectableRange: ['08:00:00 - 12:00:00', '13:00:00 - 17:00:00']
+};
+
+const isLunchTime = (time) => {
+  return time >= '12:00' && time <= '13:00';
+};
+
+const isWeekend = (date) => {
+  if (!date) return false;
+  const [day, month, year] = date.split('-');
+  const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  const dayOfWeek = dateObj.getDay();
+  return dayOfWeek === 0 || dayOfWeek === 6;
 };
 
 const rules = {
@@ -61,14 +76,33 @@ const rules = {
     { required: false, message: 'Las observaciones son opcionales', trigger: 'blur' }
   ],
   fecha: [
-    { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' }
+    { required: true, message: 'Por favor seleccione una fecha', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (value && isWeekend(value)) {
+          callback(new Error('No se pueden hacer reservas los fines de semana'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'change'
+    }
   ],
   hora_inicio: [
     { required: true, message: 'Por favor seleccione la hora de inicio', trigger: 'blur' },
     { 
       validator: (rule, value, callback) => {
-        if (value && (value < '08:00' || value > '17:00')) {
+        if (!value) {
+          callback();
+          return;
+        }
+        const hour = parseInt(value.split(':')[0]);
+        const minute = parseInt(value.split(':')[1]);
+        
+        if (hour < 8 || hour >= 17) {
           callback(new Error('El horario debe estar entre 8:00 AM y 5:00 PM'));
+        } else if (hour === 12) {
+          callback(new Error('No se pueden hacer reservas durante el horario de almuerzo (12:00 PM - 1:00 PM)'));
         } else {
           callback();
         }
@@ -80,8 +114,17 @@ const rules = {
     { required: true, message: 'Por favor seleccione la hora de fin', trigger: 'blur' },
     { 
       validator: (rule, value, callback) => {
-        if (value && (value < '08:00' || value > '17:00')) {
+        if (!value) {
+          callback();
+          return;
+        }
+        const hour = parseInt(value.split(':')[0]);
+        const minute = parseInt(value.split(':')[1]);
+        
+        if (hour < 8 || hour >= 17) {
           callback(new Error('El horario debe estar entre 8:00 AM y 5:00 PM'));
+        } else if (hour === 12) {
+          callback(new Error('No se pueden hacer reservas durante el horario de almuerzo (12:00 PM - 1:00 PM)'));
         } else if (value && form.hora_inicio && value <= form.hora_inicio) {
           callback(new Error('La hora de fin debe ser mayor a la hora de inicio'));
         } else {
@@ -167,6 +210,7 @@ const checkAvailableSalas = async () => {
         reserva.fecha === formattedDate &&
         !(props.formMode === 'edit' && reserva.id_reserva === form.id_reserva)) {
       
+      // Verificar si hay superposición de horarios
       if (isTimeOverlap(
         form.hora_inicio,
         form.hora_fin,
@@ -182,6 +226,12 @@ const checkAvailableSalas = async () => {
   availableSalas.value = sedesSalas.filter(sala => 
     !salasOcupadas.has(sala.id_sala)
   );
+
+  // Si la sala seleccionada ya no está disponible, limpiarla
+  if (form.id_sala && !availableSalas.value.find(s => s.id_sala === form.id_sala)) {
+    form.id_sala = null;
+    ElMessage.warning('La sala seleccionada ya no está disponible para el horario elegido');
+  }
 };
 
 const disablePastDates = (date) => {
@@ -311,6 +361,64 @@ defineExpose({ resetForm, updateReservas });
         format="DD-MM-YYYY" 
         value-format="DD-MM-YYYY"
         :disabled-date="disablePastDates"
+        :locale="{
+          name: 'es',
+          el: {
+            datepicker: {
+              now: 'Ahora',
+              today: 'Hoy',
+              cancel: 'Cancelar',
+              clear: 'Limpiar',
+              confirm: 'Confirmar',
+              selectDate: 'Seleccionar fecha',
+              selectTime: 'Seleccionar hora',
+              startDate: 'Fecha inicial',
+              startTime: 'Hora inicial',
+              endDate: 'Fecha final',
+              endTime: 'Hora final',
+              prevYear: 'Año anterior',
+              nextYear: 'Año siguiente',
+              prevMonth: 'Mes anterior',
+              nextMonth: 'Mes siguiente',
+              year: 'Año',
+              month1: 'Enero',
+              month2: 'Febrero',
+              month3: 'Marzo',
+              month4: 'Abril',
+              month5: 'Mayo',
+              month6: 'Junio',
+              month7: 'Julio',
+              month8: 'Agosto',
+              month9: 'Septiembre',
+              month10: 'Octubre',
+              month11: 'Noviembre',
+              month12: 'Diciembre',
+              weeks: {
+                sun: 'Dom',
+                mon: 'Lun',
+                tue: 'Mar',
+                wed: 'Mié',
+                thu: 'Jue',
+                fri: 'Vie',
+                sat: 'Sáb'
+              },
+              months: {
+                jan: 'Ene',
+                feb: 'Feb',
+                mar: 'Mar',
+                apr: 'Abr',
+                may: 'May',
+                jun: 'Jun',
+                jul: 'Jul',
+                aug: 'Ago',
+                sep: 'Sep',
+                oct: 'Oct',
+                nov: 'Nov',
+                dec: 'Dic'
+              }
+            }
+          }
+        }"
         @change="checkAvailableSalas">
       </el-date-picker>
     </el-form-item>
@@ -322,6 +430,15 @@ defineExpose({ resetForm, updateReservas });
         :disabled="!form.fecha"
         :picker-options="timePickerOptions"
         placeholder="Seleccione la hora de inicio"
+        :disabled-hours="() => {
+          const hours = [];
+          for (let i = 0; i < 24; i++) {
+            if (i < 8 || i >= 17 || i === 12) {
+              hours.push(i);
+            }
+          }
+          return hours;
+        }"
         @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
@@ -333,6 +450,15 @@ defineExpose({ resetForm, updateReservas });
         :disabled="!form.hora_inicio"
         :picker-options="timePickerOptions"
         placeholder="Seleccione la hora de fin"
+        :disabled-hours="() => {
+          const hours = [];
+          for (let i = 0; i < 24; i++) {
+            if (i < 8 || i >= 17 || i === 12) {
+              hours.push(i);
+            }
+          }
+          return hours;
+        }"
         @change="checkAvailableSalas">
       </el-time-picker>
     </el-form-item>
@@ -423,6 +549,17 @@ defineExpose({ resetForm, updateReservas });
   padding: 20px;
   margin: 0;
   border-top: 1px solid #dcdfe6;
+}
+
+:deep(.el-time-picker__input) {
+  font-weight: bold;
+}
+
+:deep(.el-time-picker__input[disabled]) {
+  color: #999;
+  background-color: #f5f7fa;
+  border-color: #e4e7ed;
+  cursor: not-allowed;
 }
 </style>
 

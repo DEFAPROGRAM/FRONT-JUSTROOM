@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, inject } from 'vue'
 import Formulario from '../../components/Formulario.vue'
 import FormSedes from './components/FormSedes.vue'
 import Header from '../../components/Header.vue'
@@ -56,6 +56,9 @@ const sedes = ref<Sede[]>([])
 const formMode = ref<'create' | 'edit'>('create')
 const currentSede = ref<Sede | null>(null)
 const loading = ref(false)
+
+// Obtener la función updateStats del componente padre
+const updateStats = inject('updateStats')
 
 const loadSedes = async () => {
   loading.value = true
@@ -87,6 +90,10 @@ const handleSubmit = async (formData: Sede) => {
     }
     dialogVisible.value = false
     await loadSedes()  // Refresca la lista de sedes
+    // Actualizar estadísticas del dashboard
+    if (updateStats) {
+      await updateStats('sedes')
+    }
   } catch (error) {
     console.error('Error al procesar la sede:', error)
     ElMessage.error('Ocurrió un error al procesar la sede')
@@ -113,6 +120,10 @@ const deleteSede = (sede: Sede) => {
       await axios.delete(`http://127.0.0.1:8000/api/sedes/${sede.id_sede}`)
       ElMessage.success('Sede eliminada con éxito')
       await loadSedes()  // Refresca la lista de sedes
+      // Actualizar estadísticas del dashboard
+      if (updateStats) {
+        await updateStats('sedes')
+      }
     } catch (error) {
       console.error('Error al eliminar la sede:', error)
       ElMessage.error('Ocurrió un error al eliminar la sede')

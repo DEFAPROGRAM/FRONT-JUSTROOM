@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import Formulario from '../../components/Formulario.vue'
 import FormReservas from './components/FormReservas.vue'
 import Header from '../../components/Header.vue'
@@ -112,6 +112,9 @@ const salas = ref<Sala[]>([])
 const juzgados = ref<Juzgado[]>([])
 const sedes = ref<Sede[]>([])
 const formReservasRef = ref(null)
+
+// Obtener la función updateStats del componente padre
+const updateStats = inject('updateStats')
 
 const reservasConDetalles = computed(() => {
   return reservas.value.map(reserva => ({
@@ -199,6 +202,35 @@ const showForm = () => {
 
 const handleSubmit = async (formData) => {
   try {
+    // Validar que la sala pertenezca a la sede del usuario
+    const sala = salas.value.find(s => s.id_sala === formData.id_sala);
+    const user = users.value.find(u => u.id === formData.id_usuario);
+    const juzgado = juzgados.value.find(j => j.id_juzgado === user?.id_juzgado);
+    
+    if (sala && juzgado && sala.id_sede !== juzgado.id_sede) {
+      ElMessage.error('No puede reservar una sala que no pertenece a su sede');
+      return;
+    }
+
+    // Validar que no exista una reserva pendiente o confirmada para la misma sala y horario
+    const reservaExistente = reservas.value.find(r => 
+      r.id_sala === formData.id_sala &&
+      r.fecha === formData.fecha &&
+      r.estado !== 'cancelada' &&
+      r.id_reserva !== formData.id_reserva &&
+      isTimeOverlap(
+        formData.hora_inicio,
+        formData.hora_fin,
+        r.hora_inicio,
+        r.hora_fin
+      )
+    );
+
+    if (reservaExistente) {
+      ElMessage.error('Ya existe una reserva para esta sala en el horario seleccionado');
+      return;
+    }
+
     if (formMode.value === 'create') {
       await axios.post('http://127.0.0.1:8000/api/reservas', formData)
       ElMessage.success('Reserva creada con éxito')
@@ -211,6 +243,10 @@ const handleSubmit = async (formData) => {
       formReservasRef.value.resetForm()
     }
     await loadReservas()
+    // Actualizar estadísticas del dashboard
+    if (updateStats) {
+      await updateStats('reservas')
+    }
   } catch (error) {
     if (error.response?.data?.errors) {
       const errorMessages = Object.values(error.response.data.errors).flat()
@@ -220,6 +256,10 @@ const handleSubmit = async (formData) => {
     }
   }
 }
+
+const isTimeOverlap = (start1, end1, start2, end2) => {
+  return (start1 < end2 && end1 > start2);
+};
 
 const editReserva = (reserva) => {
   formMode.value = 'edit'
@@ -254,6 +294,10 @@ const deleteReserva = (reserva) => {
       await axios.delete(`http://127.0.0.1:8000/api/reservas/${reserva.id_reserva}`)
       ElMessage.success('Reserva eliminada con éxito')
       await loadReservas()
+      // Actualizar estadísticas del dashboard
+      if (updateStats) {
+        await updateStats('reservas')
+      }
     } catch (error) {
       ElMessage.error('Error al eliminar la reserva')
     }
