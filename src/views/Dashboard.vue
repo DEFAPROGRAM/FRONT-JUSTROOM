@@ -43,23 +43,23 @@
     <!-- Contenido principal -->
     <div class="main-content" style="background: linear-gradient(rgba(76, 180, 255, 0.1), rgba(76, 180, 255, 0.1)), url('/src/assets/sala.jpg'); background-size: cover; background-position: center; min-height: 100vh; position: relative;">
       <div class="overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(76, 180, 255, 0.05);"></div>
-      <div class="card shadow-sm border-0" style="background-color: #87CEEB; position: relative; z-index: 1;">
-        <div class="card-header" style="background-color: #87CEEB; color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
+      <div class="card shadow-sm border-0" style="background-color: #4A708B; position: relative; z-index: 1;">
+        <div class="card-header" style="background-color: #4A708B; color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 1rem;">
             <i class="fas fa-user me-2" style="color: white;"></i>
             <span style="color: white; font-size: 1.25rem; font-weight: bold;">Bienvenido, {{ userName }}</span>
           </div>
-          <button @click="logout" class="btn" style="background-color: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-            <i class="fas fa-sign-out-alt me-2" style="color: white;"></i>
+          <button @click="logout" class="btn logout-btn">
+            <i class="fas fa-sign-out-alt me-2"></i>
             Cerrar Sesión
           </button>
         </div>
         <div class="card-body">
           <!-- Contadores -->
-          <div v-if="!currentModule" class="row g-4" style="background-color: #87CEEB; padding: 20px; border-radius: 10px;">
+          <div v-if="!currentModule" class="row g-4" style="background-color: #4A708B; padding: 20px; border-radius: 10px;">
             <!-- Reservas -->
             <div class="col">
-              <div class="card bg-success text-white shadow-sm h-100">
+              <div class="card bg-warning text-dark shadow-sm h-100">
                 <div class="card-body">
                   <h5 class="card-title">
                     <i class="fas fa-calendar-check me-2"></i>Reservas
@@ -81,7 +81,7 @@
             </div>
             <!-- Sedes -->
             <div class="col">
-              <div class="card" style="background-color: #dc3545; color: white; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 100%;">
+              <div class="card bg-danger text-white shadow-sm h-100">
                 <div class="card-body">
                   <h5 class="card-title">
                     <i class="fas fa-building me-2"></i>Sedes
@@ -92,7 +92,7 @@
             </div>
             <!-- Juzgados -->
             <div class="col">
-              <div class="card bg-warning text-white shadow-sm h-100">
+              <div class="card bg-success text-white shadow-sm h-100">
                 <div class="card-body">
                   <h5 class="card-title">
                     <i class="fas fa-gavel me-2"></i>Juzgados
@@ -381,13 +381,17 @@ export default {
   margin-bottom: 1rem;
 }
 
-.btn-danger {
-  transition: all 0.3s ease;
+.logout-btn {
+  background: linear-gradient(90deg, #205493 0%, #3578c6 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: bold;
+  transition: all 0.3s;
 }
 
-.btn-danger:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
+.logout-btn:hover {
+  background: #163a6b !important;
+  color: #fff !important;
 }
 
 .bg-purple {

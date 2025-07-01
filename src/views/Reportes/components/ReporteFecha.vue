@@ -51,6 +51,10 @@
           <i class="fas fa-search me-2"></i>
           Generar Reporte
         </el-button>
+        <el-button type="success" @click="generarReporteSinFiltros" :loading="loading">
+          <i class="fas fa-list me-2"></i>
+          Ver Todas las Reservas
+        </el-button>
         <el-button @click="limpiarFiltros">
           <i class="fas fa-eraser me-2"></i>
           Limpiar Filtros
@@ -122,6 +126,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="juzgado.nom_juzgado" label="Juzgado" width="150" />
+        <el-table-column prop="sede.nom_sede" label="Sede" width="150" />
         <el-table-column prop="descripcion" label="Descripción" />
         <el-table-column prop="estado" label="Estado" width="120">
           <template #default="scope">
@@ -155,6 +160,9 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { logoJustroomBase64, logoInstitucionalBase64 } from '@/assets/logosBase64'
 
 const emit = defineEmits(['close', 'export'])
 
@@ -174,17 +182,141 @@ const generarReporte = async () => {
     const token = localStorage.getItem('token')
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
     
-    const params = new URLSearchParams()
-    if (filtros.fecha_inicio) params.append('fecha_inicio', filtros.fecha_inicio)
-    if (filtros.fecha_fin) params.append('fecha_fin', filtros.fecha_fin)
-    if (filtros.hora_inicio) params.append('hora_inicio', filtros.hora_inicio)
-    if (filtros.hora_fin) params.append('hora_fin', filtros.hora_fin)
+    // Obtener todas las reservas
+    const response = await axios.get('http://127.0.0.1:8000/api/reservas', { headers })
+    let reservas = response.data.data || response.data
+    
+    console.log('Todas las reservas obtenidas:', reservas.length)
+    console.log('Filtros aplicados:', filtros)
+    
+    // Mostrar algunas reservas para depuración
+    if (reservas.length > 0) {
+      console.log('Ejemplo de reserva:', reservas[0])
+    }
+    
+    // Filtrar por fecha y hora de manera robusta SOLO reservas completamente dentro del rango
+    if (filtros.fecha_inicio || filtros.fecha_fin || filtros.hora_inicio || filtros.hora_fin) {
+      reservas = reservas.filter(reserva => {
+        // Combinar fecha y hora de la reserva
+        const fechaReserva = reserva.fecha
+        const horaInicioReserva = reserva.hora_inicio || '00:00'
+        const horaFinReserva = reserva.hora_fin || '23:59'
+        // Formato: 'YYYY-MM-DDTHH:mm'
+        const inicioReserva = new Date(`${fechaReserva}T${horaInicioReserva}`)
+        const finReserva = new Date(`${fechaReserva}T${horaFinReserva}`)
 
-    const response = await axios.get(`http://127.0.0.1:8000/api/reportes/reservas-por-fecha?${params}`, { headers })
-    datosReporte.value = response.data
+        // Combinar fecha y hora de los filtros
+        const filtroFechaInicio = filtros.fecha_inicio ? filtros.fecha_inicio : fechaReserva
+        const filtroHoraInicio = filtros.hora_inicio ? filtros.hora_inicio : '00:00'
+        const filtroInicio = new Date(`${filtroFechaInicio}T${filtroHoraInicio}`)
+
+        const filtroFechaFin = filtros.fecha_fin ? filtros.fecha_fin : fechaReserva
+        const filtroHoraFin = filtros.hora_fin ? filtros.hora_fin : '23:59'
+        const filtroFin = new Date(`${filtroFechaFin}T${filtroHoraFin}`)
+
+        // SOLO reservas completamente dentro del rango
+        return (
+          inicioReserva >= filtroInicio && finReserva <= filtroFin
+        )
+      })
+    }
+    
+    // Obtener información adicional de salas, usuarios, juzgados y sedes
+    const [salasResponse, usersResponse, juzgadosResponse, sedesResponse] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/salas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/users', { headers }),
+      axios.get('http://127.0.0.1:8000/api/juzgados', { headers }),
+      axios.get('http://127.0.0.1:8000/api/sedes', { headers })
+    ])
+    
+    const salas = salasResponse.data
+    const users = usersResponse.data.data || usersResponse.data
+    const juzgados = juzgadosResponse.data
+    const sedes = sedesResponse.data
+    
+    // Enriquecer las reservas con información relacionada
+    const reservasEnriquecidas = reservas.map(reserva => {
+      const sala = salas.find(s => s.id_sala === reserva.id_sala)
+      const user = users.find(u => u.id === reserva.id_usuario)
+      const juzgado = user ? juzgados.find(j => j.id_juzgado === user.id_juzgado) : null
+      const sede = user ? sedes.find(s => s.id_sede === user.id_sede) : null
+      
+      return {
+        ...reserva,
+        sala: sala || { nom_sala: 'Sin sala' },
+        usuario: user || { nombres: 'Sin usuario', apellidos: '' },
+        juzgado: juzgado || { nom_juzgado: 'Sin juzgado' },
+        sede: sede || { nom_sede: 'Sin sede' }
+      }
+    })
+    
+    datosReporte.value = {
+      total: reservasEnriquecidas.length,
+      data: reservasEnriquecidas
+    }
+    
+    ElMessage.success(`Se encontraron ${reservasEnriquecidas.length} reservas`)
   } catch (error) {
     console.error('Error al generar reporte:', error)
-    ElMessage.error('Error al generar el reporte')
+    ElMessage.error('Error al generar el reporte. Verifique que el servidor backend esté funcionando.')
+  } finally {
+    loading.value = false
+  }
+}
+
+const generarReporteSinFiltros = async () => {
+  loading.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    
+    // Obtener todas las reservas sin filtros
+    const response = await axios.get('http://127.0.0.1:8000/api/reservas', { headers })
+    let reservas = response.data.data || response.data
+    
+    console.log('Todas las reservas sin filtros:', reservas.length)
+    if (reservas.length > 0) {
+      console.log('Ejemplo de reserva:', reservas[0])
+    }
+    
+    // Obtener información adicional de salas, usuarios, juzgados y sedes
+    const [salasResponse, usersResponse, juzgadosResponse, sedesResponse] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/salas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/users', { headers }),
+      axios.get('http://127.0.0.1:8000/api/juzgados', { headers }),
+      axios.get('http://127.0.0.1:8000/api/sedes', { headers })
+    ])
+    
+    const salas = salasResponse.data
+    const users = usersResponse.data.data || usersResponse.data
+    const juzgados = juzgadosResponse.data
+    const sedes = sedesResponse.data
+    
+    // Enriquecer las reservas con información relacionada
+    const reservasEnriquecidas = reservas.map(reserva => {
+      const sala = salas.find(s => s.id_sala === reserva.id_sala)
+      const user = users.find(u => u.id === reserva.id_usuario)
+      const juzgado = user ? juzgados.find(j => j.id_juzgado === user.id_juzgado) : null
+      const sede = user ? sedes.find(s => s.id_sede === user.id_sede) : null
+      
+      return {
+        ...reserva,
+        sala: sala || { nom_sala: 'Sin sala' },
+        usuario: user || { nombres: 'Sin usuario', apellidos: '' },
+        juzgado: juzgado || { nom_juzgado: 'Sin juzgado' },
+        sede: sede || { nom_sede: 'Sin sede' }
+      }
+    })
+    
+    datosReporte.value = {
+      total: reservasEnriquecidas.length,
+      data: reservasEnriquecidas
+    }
+    
+    ElMessage.success(`Se encontraron ${reservasEnriquecidas.length} reservas (sin filtros)`)
+  } catch (error) {
+    console.error('Error al generar reporte sin filtros:', error)
+    ElMessage.error('Error al generar el reporte. Verifique que el servidor backend esté funcionando.')
   } finally {
     loading.value = false
   }
@@ -219,11 +351,154 @@ const formatDate = (dateString) => {
 }
 
 const exportarExcel = () => {
-  ElMessage.info('Función de exportación a Excel en desarrollo')
+  if (!datosReporte.value?.data?.length) {
+    ElMessage.warning('No hay datos para exportar')
+    return
+  }
+
+  try {
+    // Importar XLSX dinámicamente
+    import('xlsx').then(XLSX => {
+      // Crear un nuevo libro de trabajo
+      const wb = XLSX.utils.book_new()
+      
+      // Preparar los datos para la hoja
+      const data = datosReporte.value.data.map(row => ({
+        'Fecha': formatDate(row.fecha),
+        'Hora Inicio': row.hora_inicio,
+        'Hora Fin': row.hora_fin,
+        'Sala': row.sala?.nom_sala || '',
+        'Usuario': `${row.usuario?.nombres || ''} ${row.usuario?.apellidos || ''}`.trim(),
+        'Juzgado': row.juzgado?.nom_juzgado || '',
+        'Sede': row.sede?.nom_sede || '',
+        'Descripción': row.descripcion || '',
+        'Estado': row.estado || ''
+      }))
+      
+      // Crear la hoja de datos
+      const ws = XLSX.utils.json_to_sheet(data)
+      
+      // Agregar el título en la primera fila
+      const titulo = 'Reporte de Reservas por Fecha'
+      XLSX.utils.sheet_add_aoa(ws, [[titulo]], { origin: 'A1' })
+      XLSX.utils.sheet_add_aoa(ws, [['']], { origin: 'A2' }) // Fila vacía
+      
+      // Mover los datos hacia abajo para dejar espacio al título
+      const range = XLSX.utils.decode_range(ws['!ref'])
+      const newRange = {
+        s: { r: range.s.r + 2, c: range.s.c },
+        e: { r: range.e.r + 2, c: range.e.c }
+      }
+      ws['!ref'] = XLSX.utils.encode_range(newRange)
+      
+      // Agregar la hoja al libro
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas por Fecha')
+      
+      // Generar el archivo
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      
+      // Descargar el archivo
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(dataBlob)
+      link.download = `Reporte_Reservas_Fecha_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      
+      ElMessage.success('Archivo Excel exportado correctamente')
+    }).catch(error => {
+      console.error('Error al cargar XLSX:', error)
+      ElMessage.error('Error al exportar Excel: No se pudo cargar la librería')
+    })
+  } catch (error) {
+    console.error('Error al exportar Excel:', error)
+    ElMessage.error('Error al exportar el archivo Excel')
+  }
 }
 
-const exportarPDF = () => {
-  ElMessage.info('Función de exportación a PDF en desarrollo')
+const exportarPDF = async () => {
+  try {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const azul = '#205493'
+    const azulRGB = [32, 84, 147]
+    const blanco = '#FFFFFF'
+    const gris = '#F5F6FA'
+    
+    doc.setFillColor(azul)
+    doc.rect(0, 0, pageWidth, 120, 'F')
+    
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(26)
+    doc.setTextColor(255,255,255)
+    doc.text('Reporte Listado de Reservas por Fecha', pageWidth/2, 60, { align: 'center' })
+    
+    doc.setFillColor(azul)
+    doc.rect(0, 120, pageWidth, 30, 'F')
+    doc.setFontSize(14)
+    doc.setTextColor(255,255,255)
+    doc.text('Sistema de Reservas y Prestamos de Salas de Audiencias', pageWidth/2, 140, { align: 'center' })
+    
+    doc.setFillColor(blanco)
+    doc.rect(0, 150, pageWidth, pageHeight-230, 'F')
+    
+    // Encabezados y datos de la tabla
+    const headers = [
+      'Fecha', 'Hora Inicio', 'Hora Fin', 'Sala', 'Usuario', 'Juzgado', 'Sede', 'Descripción', 'Estado'
+    ]
+    const data = (datosReporte.value?.data || []).map(row => [
+      formatDate(row.fecha),
+      row.hora_inicio,
+      row.hora_fin,
+      row.sala?.nom_sala || '',
+      `${row.usuario?.nombres || ''} ${row.usuario?.apellidos || ''}`,
+      row.juzgado?.nom_juzgado || '',
+      row.sede?.nom_sede || '',
+      row.descripcion,
+      row.estado
+    ])
+    
+    autoTable(doc, {
+      head: [headers],
+      body: data,
+      startY: 170,
+      margin: { left: 30, right: 30 },
+      styles: {
+        fontSize: 10,
+        cellPadding: 4,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'center',
+        minCellHeight: 18
+      },
+      headStyles: {
+        fillColor: azulRGB,
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 11
+      },
+      alternateRowStyles: {
+        fillColor: gris
+      },
+      tableLineColor: azulRGB,
+      tableLineWidth: 0.5
+    })
+    
+    doc.setFillColor(azul)
+    doc.rect(0, pageHeight-80, pageWidth, 80, 'F')
+    
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(11)
+    doc.setTextColor(255,255,255)
+    doc.text('Rama Judicial - Seccional Cartagena Área de Sistemas', pageWidth/2, pageHeight-50, { align: 'center' })
+    doc.text('Calle del Cuartel, Cra 5 # 36-29 piso 2', pageWidth/2, pageHeight-30, { align: 'center' })
+    
+    doc.save(`Reporte_Listado_Reservas_Fecha_${new Date().toISOString().split('T')[0]}.pdf`)
+    ElMessage.success('Archivo PDF exportado correctamente')
+  } catch (error) {
+    console.error('Error al exportar PDF:', error)
+    ElMessage.error('Error al exportar el archivo PDF: ' + error.message)
+  }
 }
 </script>
 

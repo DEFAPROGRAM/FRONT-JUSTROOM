@@ -71,9 +71,13 @@
       <div class="resumen-stats">
         <el-row :gutter="20">
           <el-col :span="6">
-            <el-card class="stat-card">
-              <div class="stat-number">{{ datosReporte.total_salas }}</div>
-              <div class="stat-label">Total Salas</div>
+            <el-card class="stat-card bg-danger">
+              <div class="stat-number">{{ datosReporte.data[datosReporte.data.length-1]?.nom_sala || 'N/A' }}</div>
+              <div class="stat-label">Sala Menos Popular</div>
+              <div style="font-size: 1.1rem; color: #fff; margin-top: 4px;">
+                {{ datosReporte.data[datosReporte.data.length-1]?.nom_sede || 'Sin sede' }}<br/>
+                {{ datosReporte.data[datosReporte.data.length-1]?.total_reservas || 0 }} reservas
+              </div>
             </el-card>
           </el-col>
           <el-col :span="6">
@@ -92,6 +96,10 @@
             <el-card class="stat-card bg-warning">
               <div class="stat-number">{{ datosReporte.data[0]?.nom_sala || 'N/A' }}</div>
               <div class="stat-label">Sala Más Popular</div>
+              <div style="font-size: 1.1rem; color: #fff; margin-top: 4px;">
+                {{ datosReporte.data[0]?.nom_sede || 'Sin sede' }}<br/>
+                {{ datosReporte.data[0]?.total_reservas || 0 }} reservas
+              </div>
             </el-card>
           </el-col>
         </el-row>
@@ -199,6 +207,9 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { logoJustroomBase64, logoInstitucionalBase64 } from '@/assets/logosBase64'
 
 const emit = defineEmits(['close', 'export'])
 
@@ -216,14 +227,55 @@ const generarReporte = async () => {
   try {
     const token = localStorage.getItem('token')
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
-    
-    const params = new URLSearchParams()
-    if (filtros.fecha_inicio) params.append('fecha_inicio', filtros.fecha_inicio)
-    if (filtros.fecha_fin) params.append('fecha_fin', filtros.fecha_fin)
-    if (filtros.limite) params.append('limite', filtros.limite.toString())
-
-    const response = await axios.get(`http://127.0.0.1:8000/api/reportes/salas-mas-solicitadas?${params}`, { headers })
-    datosReporte.value = response.data
+    // Obtener todas las reservas
+    const response = await axios.get('http://127.0.0.1:8000/api/reservas', { headers })
+    let reservas = response.data.data || response.data
+    // Filtrar por rango de fechas
+    if (filtros.fecha_inicio) {
+      reservas = reservas.filter(r => new Date(r.fecha) >= new Date(filtros.fecha_inicio))
+    }
+    if (filtros.fecha_fin) {
+      reservas = reservas.filter(r => new Date(r.fecha) <= new Date(filtros.fecha_fin))
+    }
+    // Obtener info de salas y sedes
+    const salasResponse = await axios.get('http://127.0.0.1:8000/api/salas', { headers })
+    const salas = salasResponse.data
+    const sedesResponse = await axios.get('http://127.0.0.1:8000/api/sedes', { headers })
+    const sedes = sedesResponse.data
+    // Contar reservas por sala
+    const conteo = {}
+    reservas.forEach(r => {
+      if (!conteo[r.id_sala]) conteo[r.id_sala] = { total: 0, confirmadas: 0, pendientes: 0, canceladas: 0 }
+      conteo[r.id_sala].total++
+      if (r.estado === 'confirmada') conteo[r.id_sala].confirmadas++
+      if (r.estado === 'pendiente') conteo[r.id_sala].pendientes++
+      if (r.estado === 'cancelada') conteo[r.id_sala].canceladas++
+    })
+    // Armar ranking
+    let ranking = Object.keys(conteo).map(id_sala => {
+      const sala = salas.find(s => s.id === parseInt(id_sala) || s.id_sala === parseInt(id_sala)) || {}
+      const sede = sala.id_sede ? sedes.find(se => se.id_sede === sala.id_sede) : null
+      return {
+        id_sala: parseInt(id_sala),
+        nom_sala: sala.nom_sala || 'Sin nombre',
+        capacidad: sala.capacidad || '',
+        nom_sede: sede ? sede.nom_sede : 'Sin sede',
+        total_reservas: conteo[id_sala].total,
+        reservas_confirmadas: conteo[id_sala].confirmadas,
+        reservas_pendientes: conteo[id_sala].pendientes,
+        reservas_canceladas: conteo[id_sala].canceladas
+      }
+    })
+    ranking = ranking.sort((a, b) => b.total_reservas - a.total_reservas)
+    // Limitar resultados
+    const limite = filtros.limite || 10
+    ranking = ranking.slice(0, limite)
+    // Datos para resumen
+    datosReporte.value = {
+      total_salas: ranking.length,
+      data: ranking
+    }
+    ElMessage.success(`Se encontraron ${ranking.length} salas más solicitadas`)
   } catch (error) {
     console.error('Error al generar reporte:', error)
     ElMessage.error('Error al generar el reporte')
@@ -270,12 +322,184 @@ const getTasaConfirmacion = () => {
   return Math.round((confirmadas / totalReservas) * 100) || 0
 }
 
-const exportarExcel = () => {
-  ElMessage.info('Función de exportación a Excel en desarrollo')
+const exportarExcel = async () => {
+  if (!datosReporte.value?.data?.length) {
+    ElMessage.warning('No hay datos para exportar')
+    return
+  }
+  try {
+    const token = localStorage.getItem('token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    // Obtener todas las reservas y datos de salas/sedes para ranking completo
+    const [reservasResponse, salasResponse, sedesResponse] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/reservas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/salas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/sedes', { headers })
+    ])
+    let reservas = reservasResponse.data.data || reservasResponse.data
+    const salas = salasResponse.data
+    const sedes = sedesResponse.data
+    // Filtrar por rango de fechas
+    if (filtros.fecha_inicio) {
+      reservas = reservas.filter(r => new Date(r.fecha) >= new Date(filtros.fecha_inicio))
+    }
+    if (filtros.fecha_fin) {
+      reservas = reservas.filter(r => new Date(r.fecha) <= new Date(filtros.fecha_fin))
+    }
+    // Contar reservas por sala
+    const conteo = {}
+    reservas.forEach(r => {
+      if (!conteo[r.id_sala]) conteo[r.id_sala] = { total: 0, confirmadas: 0, pendientes: 0, canceladas: 0 }
+      conteo[r.id_sala].total++
+      if (r.estado === 'confirmada') conteo[r.id_sala].confirmadas++
+      if (r.estado === 'pendiente') conteo[r.id_sala].pendientes++
+      if (r.estado === 'cancelada') conteo[r.id_sala].canceladas++
+    })
+    // Ranking completo
+    let rankingCompleto = Object.keys(conteo).map(id_sala => {
+      const sala = salas.find(s => s.id === parseInt(id_sala) || s.id_sala === parseInt(id_sala)) || {}
+      const sede = sala.id_sede ? sedes.find(se => se.id_sede === sala.id_sede) : null
+      return {
+        id_sala: parseInt(id_sala),
+        nom_sala: sala.nom_sala || 'Sin nombre',
+        capacidad: sala.capacidad || '',
+        nom_sede: sede ? sede.nom_sede : 'Sin sede',
+        total_reservas: conteo[id_sala].total,
+        reservas_confirmadas: conteo[id_sala].confirmadas,
+        reservas_pendientes: conteo[id_sala].pendientes,
+        reservas_canceladas: conteo[id_sala].canceladas
+      }
+    })
+    rankingCompleto = rankingCompleto.sort((a, b) => b.total_reservas - a.total_reservas)
+    // Marcar más y menos popular
+    rankingCompleto = rankingCompleto.map((row, idx, arr) => ({
+      ...row,
+      Tipo: idx === 0 ? 'Más popular' : (idx === arr.length-1 ? 'Menos popular' : '')
+    }))
+    // Exportar a Excel
+    import('xlsx').then(XLSX => {
+      const wb = XLSX.utils.book_new()
+      const data = rankingCompleto.map(row => ({
+        'Sala': row.nom_sala,
+        'Sede': row.nom_sede,
+        'Capacidad': row.capacidad,
+        'Total Reservas': row.total_reservas,
+        'Confirmadas': row.reservas_confirmadas,
+        'Pendientes': row.reservas_pendientes,
+        'Canceladas': row.reservas_canceladas,
+        'Tipo': row.Tipo
+      }))
+      const ws = XLSX.utils.json_to_sheet(data)
+      const titulo = 'Ranking de Salas Más Solicitadas'
+      XLSX.utils.sheet_add_aoa(ws, [[titulo]], { origin: 'A1' })
+      XLSX.utils.sheet_add_aoa(ws, [['']], { origin: 'A2' })
+      const range = XLSX.utils.decode_range(ws['!ref'])
+      const newRange = {
+        s: { r: range.s.r + 2, c: range.s.c },
+        e: { r: range.e.r + 2, c: range.e.c }
+      }
+      ws['!ref'] = XLSX.utils.encode_range(newRange)
+      XLSX.utils.book_append_sheet(wb, ws, 'Salas Más Solicitadas')
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(dataBlob)
+      link.download = `Ranking_Salas_Mas_Solicitadas_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      ElMessage.success('Archivo Excel exportado correctamente')
+    }).catch(error => {
+      console.error('Error al cargar XLSX:', error)
+      ElMessage.error('Error al exportar Excel: No se pudo cargar la librería')
+    })
+  } catch (error) {
+    console.error('Error al exportar Excel:', error)
+    ElMessage.error('Error al exportar el archivo Excel')
+  }
 }
 
-const exportarPDF = () => {
-  ElMessage.info('Función de exportación a PDF en desarrollo')
+const exportarPDF = async () => {
+  try {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const azul = '#205493'
+    const azulRGB = [32, 84, 147]
+    const blanco = '#FFFFFF'
+    const gris = '#F5F6FA'
+    
+    doc.setFillColor(azul)
+    doc.rect(0, 0, pageWidth, 120, 'F')
+    
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(26)
+    doc.setTextColor(255,255,255)
+    doc.text('Reporte Listado de Salas Más Solicitadas', pageWidth/2, 60, { align: 'center' })
+    
+    doc.setFillColor(azul)
+    doc.rect(0, 120, pageWidth, 30, 'F')
+    doc.setFontSize(14)
+    doc.setTextColor(255,255,255)
+    doc.text('Sistema de Reservas y Prestamos de Salas de Audiencias', pageWidth/2, 140, { align: 'center' })
+    
+    doc.setFillColor(blanco)
+    doc.rect(0, 150, pageWidth, pageHeight-230, 'F')
+    
+    // Encabezados y datos de la tabla
+    const headers = [
+      'Ranking', 'Sala', 'Capacidad', 'Total Reservas', 'Confirmadas', 'Pendientes', 'Canceladas', 'Porcentaje de Ocupación'
+    ]
+    const data = (datosReporte.value?.data || []).map((row, idx) => [
+      idx + 1,
+      row.nom_sala,
+      row.capacidad,
+      row.total_reservas,
+      row.reservas_confirmadas,
+      row.reservas_pendientes,
+      row.reservas_canceladas,
+      `${getPorcentajeOcupacion(row)}%`
+    ])
+    
+    autoTable(doc, {
+      head: [headers],
+      body: data,
+      startY: 170,
+      margin: { left: 30, right: 30 },
+      styles: {
+        fontSize: 10,
+        cellPadding: 4,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'center',
+        minCellHeight: 18
+      },
+      headStyles: {
+        fillColor: azulRGB,
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 11
+      },
+      alternateRowStyles: {
+        fillColor: gris
+      },
+      tableLineColor: azulRGB,
+      tableLineWidth: 0.5
+    })
+    
+    doc.setFillColor(azul)
+    doc.rect(0, pageHeight-80, pageWidth, 80, 'F')
+    
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(11)
+    doc.setTextColor(255,255,255)
+    doc.text('Rama Judicial - Seccional Cartagena Área de Sistemas', pageWidth/2, pageHeight-50, { align: 'center' })
+    doc.text('Calle del Cuartel, Cra 5 # 36-29 piso 2', pageWidth/2, pageHeight-30, { align: 'center' })
+    
+    doc.save(`Reporte_Listado_Salas_Mas_Solicitadas_${new Date().toISOString().split('T')[0]}.pdf`)
+    ElMessage.success('Archivo PDF exportado correctamente')
+  } catch (error) {
+    console.error('Error al exportar PDF:', error)
+    ElMessage.error('Error al exportar el archivo PDF: ' + error.message)
+  }
 }
 </script>
 

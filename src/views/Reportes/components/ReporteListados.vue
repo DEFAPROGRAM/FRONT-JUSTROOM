@@ -78,6 +78,7 @@ import autoTable from 'jspdf-autotable'
 // @ts-ignore
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
+import { logoJustroomBase64, logoInstitucionalBase64 } from '@/assets/logosBase64'
 
 const emit = defineEmits(['close', 'export'])
 
@@ -129,7 +130,9 @@ const columnasConfig = {
     { prop: 'hora_fin', label: 'Hora Fin' },
     { prop: 'estado', label: 'Estado' },
     { prop: 'nom_sala', label: 'Sala' },
-    { prop: 'usuario', label: 'Usuario' }
+    { prop: 'usuario', label: 'Usuario' },
+    { prop: 'nom_juzgado', label: 'Juzgado' },
+    { prop: 'nom_sede', label: 'Sede' }
   ]
 }
 
@@ -230,14 +233,28 @@ const generarReporte = async () => {
     
     if (camposSeleccionados.value.includes('reservas')) {
       const reservasData = responses[index].data.data || responses[index].data
-      // Agregar información de sala y usuario a cada reserva
+      // Agregar información de sala, usuario, juzgado y sede a cada reserva
       const reservasConInfo = reservasData.map(reserva => {
         const sala = salas.value.find(s => s.id_sala === reserva.id_sala)
         const user = users.value.find(u => u.id === reserva.id_usuario)
+        
+        // Obtener información de juzgado y sede del usuario
+        let nom_juzgado = 'Sin juzgado'
+        let nom_sede = 'Sin sede'
+        
+        if (user) {
+          const juzgado = juzgados.value.find(j => j.id_juzgado === user.id_juzgado)
+          const sede = sedes.value.find(s => s.id_sede === user.id_sede)
+          nom_juzgado = juzgado ? juzgado.nom_juzgado : 'Sin juzgado'
+          nom_sede = sede ? sede.nom_sede : 'Sin sede'
+        }
+        
         return {
           ...reserva,
           nom_sala: sala ? sala.nom_sala : 'Sin sala',
-          usuario: user ? `${user.nombres || ''} ${user.apellidos || ''}`.trim() : 'Sin usuario'
+          usuario: user ? `${user.nombres || ''} ${user.apellidos || ''}`.trim() : 'Sin usuario',
+          nom_juzgado: nom_juzgado,
+          nom_sede: nom_sede
         }
       })
       datosReporte.value.push(...reservasConInfo)
@@ -285,14 +302,13 @@ const cargarDatosReferencia = async () => {
 }
 
 const getTituloReporte = () => {
-  const titulos = {
-    salas: 'Listado de Salas',
-    sedes: 'Listado de Sedes',
-    juzgados: 'Listado de Juzgados',
-    usuarios: 'Listado de Usuarios',
-    reservas: 'Listado de Reservas'
-  }
-  return titulos[tipoSeleccionado.value] || 'Reporte'
+  if (camposSeleccionados.value.length === 0) return 'Reporte';
+  // Convertir los valores seleccionados a sus labels
+  const labels = camposSeleccionados.value.map(val => {
+    const campo = camposDisponibles.find(c => c.value === val)
+    return campo ? campo.label : val
+  })
+  return `Reporte Listado de ${labels.join(', ')}`
 }
 
 const formatDate = (dateString) => {
@@ -363,126 +379,92 @@ const exportarPDF = async () => {
   }
 
   try {
-    // Crear el documento PDF
-    const doc = new jsPDF()
-    
-    // Obtener el título del reporte
-    const titulo = getTituloReporte()
-    
-    // Función para generar el PDF sin logo (fallback)
-    const generatePDF = () => {
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
-      
-      // Título centrado
-      doc.setFontSize(18)
-      doc.setFont('helvetica', 'bold')
-      doc.text(titulo, pageWidth / 2, 40, { align: 'center' })
-      
-      // Fecha del reporte
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'normal')
-      const fecha = new Date().toLocaleDateString('es-ES', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+
+    // Colores institucionales
+    const azul = '#205493'
+    const azulRGB = [32, 84, 147]
+    const blanco = '#FFFFFF'
+    const gris = '#F5F6FA'
+
+    // Fondo superior azul
+    doc.setFillColor(azul)
+    doc.rect(0, 0, pageWidth, 120, 'F')
+
+    // Título dinámico
+    const tituloReporte = getTituloReporte()
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(26)
+    doc.setTextColor(255,255,255)
+    doc.text(tituloReporte, pageWidth/2, 60, { align: 'center' })
+
+    // Subtítulo barra azul
+    doc.setFillColor(azul)
+    doc.rect(0, 120, pageWidth, 30, 'F')
+    doc.setFontSize(14)
+    doc.setTextColor(255,255,255)
+    doc.text('Sistema de Reservas y Prestamos de Salas de Audiencias', pageWidth/2, 140, { align: 'center' })
+
+    // Área blanca para la tabla
+    doc.setFillColor(blanco)
+    doc.rect(0, 150, pageWidth, pageHeight-230, 'F')
+
+    // Preparar datos para la tabla
+    const headers = columnasSeleccionadas.value.map(col => col.label)
+    const data = datosReporte.value.map(row =>
+      columnasSeleccionadas.value.map(col => {
+        const value = row[col.prop]
+        if (value === null || value === undefined) return ''
+        return String(value)
       })
-      doc.text(`Fecha: ${fecha}`, pageWidth / 2, 55, { align: 'center' })
-      
-      // Preparar datos para la tabla
-      const headers = columnasSeleccionadas.value.map(col => col.label)
-      const data = datosReporte.value.map(row => 
-        columnasSeleccionadas.value.map(col => {
-          const value = row[col.prop]
-          if (value === null || value === undefined) return ''
-          return String(value)
-        })
-      )
-      
-      // Agregar tabla
-      autoTable(doc, {
-        head: [headers],
-        body: data,
-        startY: 70,
-        styles: {
-          fontSize: 8,
-          cellPadding: 2
-        },
-        headStyles: {
-          fillColor: [108, 117, 125],
-          textColor: 255,
-          fontStyle: 'bold'
-        },
-        alternateRowStyles: {
-          fillColor: [248, 249, 250]
-        },
-        margin: { top: 70 }
-      })
-      
-      // Pie de página
-      const pageCount = (doc as any).internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'normal')
-        doc.text('Calle del Cuartel, cra 5 # 36-29', pageWidth / 2, pageHeight - 10, { align: 'center' })
-        doc.text(`Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 5, { align: 'center' })
-      }
-      
-      // Guardar el PDF
-      doc.save(`${titulo.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`)
-      
-      ElMessage.success('Archivo PDF exportado correctamente')
-    }
-    
-    // Intentar cargar el logo
-    const logo = new Image()
-    logo.crossOrigin = 'anonymous'
-    
-    logo.onload = () => {
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
-      
-      // Agregar logo en el lado derecho superior
-      const imgWidth = 40
-      const imgHeight = 20
-      const logoX = pageWidth - imgWidth - 20 // 20px de margen derecho
-      const logoY = 20
-      doc.addImage(logo, 'PNG', logoX, logoY, imgWidth, imgHeight)
-      
-      // Continuar con el resto del PDF
-      generatePDF()
-    }
-    
-    logo.onerror = () => {
-      // Si no se puede cargar el logo, generar PDF sin él
-      generatePDF()
-    }
-    
-    // Intentar cargar el logo desde diferentes rutas
-    const logoPaths = [
-      '/src/assets/JUSTROOM.png',
-      '/assets/JUSTROOM.png',
-      '/JUSTROOM.png'
-    ]
-    
-    let currentPathIndex = 0
-    const tryNextPath = () => {
-      if (currentPathIndex < logoPaths.length) {
-        logo.src = logoPaths[currentPathIndex]
-        currentPathIndex++
-      } else {
-        // Si ninguna ruta funciona, generar PDF sin logo
-        generatePDF()
-      }
-    }
-    
-    logo.onerror = tryNextPath
-    tryNextPath()
-    
+    )
+
+    // Tabla con encabezado azul
+    autoTable(doc, {
+      head: [headers],
+      body: data,
+      startY: 170,
+      margin: { left: 30, right: 30 },
+      styles: {
+        fontSize: 10,
+        cellPadding: 4,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'center',
+        minCellHeight: 18
+      },
+      headStyles: {
+        fillColor: azulRGB,
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 11
+      },
+      alternateRowStyles: {
+        fillColor: gris
+      },
+      tableLineColor: azulRGB,
+      tableLineWidth: 0.5
+    })
+
+    // Pie de página azul
+    doc.setFillColor(azul)
+    doc.rect(0, pageHeight-80, pageWidth, 80, 'F')
+
+    // Texto institucional
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(11)
+    doc.setTextColor(255,255,255)
+    doc.text('Rama Judicial - Seccional Cartagena Área de Sistemas', pageWidth/2, pageHeight-50, { align: 'center' })
+    doc.text('Calle del Cuartel, Cra 5 # 36-29 piso 2', pageWidth/2, pageHeight-30, { align: 'center' })
+
+    // Guardar PDF
+    doc.save(`${tituloReporte.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`)
+    ElMessage.success('Archivo PDF exportado correctamente')
   } catch (error) {
     console.error('Error al exportar PDF:', error)
-    ElMessage.error('Error al exportar el archivo PDF')
+    ElMessage.error('Error al exportar el archivo PDF: ' + error.message)
   }
 }
 

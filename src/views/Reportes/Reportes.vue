@@ -16,37 +16,37 @@
       </h3>
       <div class="row g-3" v-if="estadisticasGenerales">
         <div class="col-md-2">
-          <div class="stat-card bg-primary text-white">
+          <div class="stat-card bg-warning text-dark">
             <div class="stat-number">{{ estadisticasGenerales.total_salas }}</div>
             <div class="stat-label">Salas</div>
           </div>
         </div>
         <div class="col-md-2">
-          <div class="stat-card bg-success text-white">
+          <div class="stat-card bg-primary text-white">
             <div class="stat-number">{{ estadisticasGenerales.total_sedes }}</div>
             <div class="stat-label">Sedes</div>
           </div>
         </div>
         <div class="col-md-2">
-          <div class="stat-card bg-warning text-white">
+          <div class="stat-card bg-danger text-white">
             <div class="stat-number">{{ estadisticasGenerales.total_juzgados }}</div>
             <div class="stat-label">Juzgados</div>
           </div>
         </div>
         <div class="col-md-2">
-          <div class="stat-card bg-info text-white">
+          <div class="stat-card bg-success text-white">
             <div class="stat-number">{{ estadisticasGenerales.total_usuarios }}</div>
             <div class="stat-label">Usuarios</div>
           </div>
         </div>
         <div class="col-md-2">
-          <div class="stat-card bg-secondary text-white">
+          <div class="stat-card" style="background: #6f42c1; color: #fff;">
             <div class="stat-number">{{ estadisticasGenerales.total_reservas }}</div>
             <div class="stat-label">Reservas</div>
           </div>
         </div>
         <div class="col-md-2">
-          <div class="stat-card bg-dark text-white">
+          <div class="stat-card bg-secondary text-white">
             <div class="stat-number">{{ estadisticasGenerales.reservas_este_mes }}</div>
             <div class="stat-label">Este Mes</div>
           </div>
@@ -110,6 +110,19 @@
             <div class="card-content">
               <h4>Reservas por Estado</h4>
               <p>Filtrar por pendientes, confirmadas o canceladas</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reporte Juzgados Más Activos -->
+        <div class="col-md-6 col-lg-4">
+          <div class="report-card" @click="showReporte('juzgadosmasactivos')">
+            <div class="card-icon">
+              <i class="fas fa-gavel"></i>
+            </div>
+            <div class="card-content">
+              <h4>Juzgados más Activos</h4>
+              <p>Ranking de juzgados que más reservas han hecho por sede y salas</p>
             </div>
           </div>
         </div>
@@ -215,13 +228,18 @@ import ReporteFecha from './components/ReporteFecha.vue'
 import ReporteUsuario from './components/ReporteUsuario.vue'
 import ReporteEstado from './components/ReporteEstado.vue'
 import ReporteSalas from './components/ReporteSalas.vue'
+import ReporteJuzgadosMasActivos from './components/ReporteJuzgadosMasActivos.vue'
+import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 console.log('Componentes importados:', {
   ReporteListados,
   ReporteFecha,
   ReporteUsuario,
   ReporteEstado,
-  ReporteSalas
+  ReporteSalas,
+  ReporteJuzgadosMasActivos
 }) // Debug log
 
 // Obtener la función updateStats del componente padre
@@ -314,6 +332,10 @@ const showReporte = (tipo) => {
       dialogTitle.value = 'Reporte de Reservas por Estado'
       currentReportComponent.value = ReporteEstado
       break
+    case 'juzgadosmasactivos':
+      dialogTitle.value = 'Juzgados que más reservas han hecho'
+      currentReportComponent.value = ReporteJuzgadosMasActivos
+      break
     case 'salas':
       dialogTitle.value = 'Reporte de Salas Más Solicitadas'
       currentReportComponent.value = ReporteSalas
@@ -331,8 +353,86 @@ const showReporte = (tipo) => {
   console.log('Modal abierto:', dialogVisible.value) // Debug log
 }
 
-const exportarDatos = () => {
-  ElMessage.info('Función de exportación en desarrollo')
+const exportarDatos = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    // Obtener todos los datos principales
+    const [usuariosRes, reservasRes, salasRes, sedesRes, juzgadosRes] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/users', { headers }),
+      axios.get('http://127.0.0.1:8000/api/reservas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/salas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/sedes', { headers }),
+      axios.get('http://127.0.0.1:8000/api/juzgados', { headers })
+    ])
+    const usuarios = usuariosRes.data.data || usuariosRes.data
+    const reservas = reservasRes.data.data || reservasRes.data
+    const salas = salasRes.data
+    const sedes = sedesRes.data
+    const juzgados = juzgadosRes.data
+    // --- Exportar Excel ---
+    const wb = XLSX.utils.book_new()
+    wb.Props = { Title: 'Exportación de Datos - JustRoom' }
+    if (usuarios && usuarios.length) {
+      const ws = XLSX.utils.json_to_sheet(usuarios)
+      XLSX.utils.book_append_sheet(wb, ws, 'Usuarios')
+    }
+    if (reservas && reservas.length) {
+      const ws = XLSX.utils.json_to_sheet(reservas)
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas')
+    }
+    if (salas && salas.length) {
+      const ws = XLSX.utils.json_to_sheet(salas)
+      XLSX.utils.book_append_sheet(wb, ws, 'Salas')
+    }
+    if (sedes && sedes.length) {
+      const ws = XLSX.utils.json_to_sheet(sedes)
+      XLSX.utils.book_append_sheet(wb, ws, 'Sedes')
+    }
+    if (juzgados && juzgados.length) {
+      const ws = XLSX.utils.json_to_sheet(juzgados)
+      XLSX.utils.book_append_sheet(wb, ws, 'Juzgados')
+    }
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(dataBlob)
+    link.download = `Exportacion_Datos_JustRoom_${new Date().toISOString().split('T')[0]}.xlsx`
+    link.click()
+    // --- Exportar PDF ---
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    let y = 40
+    const addTable = (titulo, data) => {
+      if (!data || !data.length) return
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(18)
+      doc.text(titulo, pageWidth/2, y, { align: 'center' })
+      y += 10
+      autoTable(doc, {
+        head: [Object.keys(data[0])],
+        body: data.map(row => Object.values(row)),
+        startY: y + 10,
+        margin: { left: 20, right: 20 },
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [32, 84, 147], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 246, 250] },
+        tableLineColor: [32, 84, 147],
+        tableLineWidth: 0.5
+      })
+      y = doc.lastAutoTable.finalY + 30
+    }
+    addTable('Usuarios', usuarios)
+    addTable('Reservas', reservas)
+    addTable('Salas', salas)
+    addTable('Sedes', sedes)
+    addTable('Juzgados', juzgados)
+    doc.save(`Exportacion_Datos_JustRoom_${new Date().toISOString().split('T')[0]}.pdf`)
+    ElMessage.success('Archivos Excel y PDF exportados correctamente')
+  } catch (error) {
+    console.error('Error al exportar datos:', error)
+    ElMessage.error('Error al exportar los datos')
+  }
 }
 
 const exportarReporte = (data) => {
@@ -374,11 +474,120 @@ const generarReporte = async () => {
   }
 }
 
-const exportarDatosPersonalizado = (formato) => {
-  if (formato === 'excel') {
-    ElMessage.info('Exportación a Excel en desarrollo')
-  } else if (formato === 'pdf') {
-    ElMessage.info('Exportación a PDF en desarrollo')
+const exportarDatosPersonalizado = async (formato) => {
+  try {
+    const token = localStorage.getItem('token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    // Obtener todos los datos principales
+    const [usuariosRes, reservasRes, salasRes, sedesRes, juzgadosRes] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/users', { headers }),
+      axios.get('http://127.0.0.1:8000/api/reservas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/salas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/sedes', { headers }),
+      axios.get('http://127.0.0.1:8000/api/juzgados', { headers })
+    ])
+    const usuarios = usuariosRes.data.data || usuariosRes.data
+    const reservas = reservasRes.data.data || reservasRes.data
+    const salas = salasRes.data
+    const sedes = sedesRes.data
+    const juzgados = juzgadosRes.data
+    if (formato === 'excel') {
+      // Igual que exportarDatos
+      const wb = XLSX.utils.book_new()
+      wb.Props = { Title: 'Exportación de Datos - JustRoom' }
+      if (usuarios && usuarios.length) {
+        const ws = XLSX.utils.json_to_sheet(usuarios)
+        XLSX.utils.book_append_sheet(wb, ws, 'Usuarios')
+      }
+      if (reservas && reservas.length) {
+        const ws = XLSX.utils.json_to_sheet(reservas)
+        XLSX.utils.book_append_sheet(wb, ws, 'Reservas')
+      }
+      if (salas && salas.length) {
+        const ws = XLSX.utils.json_to_sheet(salas)
+        XLSX.utils.book_append_sheet(wb, ws, 'Salas')
+      }
+      if (sedes && sedes.length) {
+        const ws = XLSX.utils.json_to_sheet(sedes)
+        XLSX.utils.book_append_sheet(wb, ws, 'Sedes')
+      }
+      if (juzgados && juzgados.length) {
+        const ws = XLSX.utils.json_to_sheet(juzgados)
+        XLSX.utils.book_append_sheet(wb, ws, 'Juzgados')
+      }
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(dataBlob)
+      link.download = `Exportacion_Datos_JustRoom_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      ElMessage.success('Archivo Excel exportado correctamente')
+    } else if (formato === 'pdf') {
+      // PDF con diseño institucional idéntico a los reportes individuales
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const azul = '#205493'
+      const azulRGB = [32, 84, 147]
+      const blanco = '#FFFFFF'
+      const gris = '#F5F6FA'
+      // Barra superior azul (120px)
+      doc.setFillColor(azul)
+      doc.rect(0, 0, pageWidth, 120, 'F')
+      // Título grande y centrado
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(26)
+      doc.setTextColor(255,255,255)
+      doc.text('Exportación de Datos - JustRoom', pageWidth/2, 60, { align: 'center' })
+      // Subtítulo institucional en barra azul secundaria (30px)
+      doc.setFillColor(azul)
+      doc.rect(0, 120, pageWidth, 30, 'F')
+      doc.setFontSize(14)
+      doc.setTextColor(255,255,255)
+      doc.text('Sistema de Reservas y Préstamos de Salas de Audiencias', pageWidth/2, 140, { align: 'center' })
+      // Área blanca para las tablas
+      doc.setFillColor(blanco)
+      doc.rect(0, 150, pageWidth, pageHeight-230, 'F')
+      let y = 170
+      const addTable = (titulo, data) => {
+        if (!data || !data.length) return
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(16)
+        doc.setTextColor(32,84,147)
+        doc.text(titulo, pageWidth/2, y, { align: 'center' })
+        y += 10
+        autoTable(doc, {
+          head: [Object.keys(data[0])],
+          body: data.map(row => Object.values(row)),
+          startY: y + 10,
+          margin: { left: 30, right: 30 },
+          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'middle', halign: 'center', minCellHeight: 16 },
+          headStyles: { fillColor: azulRGB, textColor: 255, fontStyle: 'bold', fontSize: 10 },
+          alternateRowStyles: { fillColor: gris },
+          tableLineColor: azulRGB,
+          tableLineWidth: 0.5
+        })
+        y = doc.lastAutoTable.finalY + 30
+      }
+      addTable('Usuarios', usuarios)
+      addTable('Reservas', reservas)
+      addTable('Salas', salas)
+      addTable('Sedes', sedes)
+      addTable('Juzgados', juzgados)
+      // Pie de página azul (80px)
+      doc.setFillColor(azul)
+      doc.rect(0, pageHeight-80, pageWidth, 80, 'F')
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(11)
+      doc.setTextColor(255,255,255)
+      doc.text('Rama Judicial - Seccional Cartagena Área de Sistemas', pageWidth/2, pageHeight-50, { align: 'center' })
+      doc.text('Calle del Cuartel, Cra 5 # 36-29 piso 2', pageWidth/2, pageHeight-30, { align: 'center' })
+      doc.save(`Exportacion_Datos_JustRoom_${new Date().toISOString().split('T')[0]}.pdf`)
+      ElMessage.success('Archivo PDF exportado correctamente')
+    }
+  } catch (error) {
+    console.error('Error al exportar datos personalizado:', error)
+    ElMessage.error('Error al exportar los datos')
   }
 }
 
@@ -398,7 +607,7 @@ onMounted(() => {
   text-align: center;
   margin-bottom: 30px;
   padding: 20px;
-  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+  background: #4A708B;
   color: white;
   border-radius: 10px;
 }

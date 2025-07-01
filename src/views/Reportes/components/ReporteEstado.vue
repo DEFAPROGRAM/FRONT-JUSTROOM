@@ -48,25 +48,19 @@
       <!-- Resumen estadístico -->
       <div class="resumen-stats">
         <el-row :gutter="20">
-          <el-col :span="6">
-            <el-card class="stat-card">
-              <div class="stat-number">{{ datosReporte.total_reservas }}</div>
-              <div class="stat-label">Total Reservas</div>
-            </el-card>
-          </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-card class="stat-card bg-warning">
               <div class="stat-number">{{ datosReporte.resumen?.pendientes || 0 }}</div>
               <div class="stat-label">Pendientes</div>
             </el-card>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-card class="stat-card bg-success">
               <div class="stat-number">{{ datosReporte.resumen?.confirmadas || 0 }}</div>
               <div class="stat-label">Confirmadas</div>
             </el-card>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-card class="stat-card bg-danger">
               <div class="stat-number">{{ datosReporte.resumen?.canceladas || 0 }}</div>
               <div class="stat-label">Canceladas</div>
@@ -123,6 +117,9 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { logoJustroomBase64, logoInstitucionalBase64 } from '@/assets/logosBase64'
 
 const emit = defineEmits(['close', 'export'])
 
@@ -138,12 +135,50 @@ const generarReporte = async () => {
   try {
     const token = localStorage.getItem('token')
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
-    
-    const params = new URLSearchParams()
-    if (filtros.estado) params.append('estado', filtros.estado)
-
-    const response = await axios.get(`http://127.0.0.1:8000/api/reportes/reservas-por-estado?${params}`, { headers })
-    datosReporte.value = response.data
+    // Obtener todas las reservas
+    const response = await axios.get('http://127.0.0.1:8000/api/reservas', { headers })
+    let reservas = response.data.data || response.data
+    // Filtrar por estado si se selecciona
+    if (filtros.estado) {
+      reservas = reservas.filter(r => r.estado === filtros.estado)
+    }
+    // Obtener info adicional
+    const [salasResponse, usuariosResponse, juzgadosResponse, sedesResponse] = await Promise.all([
+      axios.get('http://127.0.0.1:8000/api/salas', { headers }),
+      axios.get('http://127.0.0.1:8000/api/users', { headers }),
+      axios.get('http://127.0.0.1:8000/api/juzgados', { headers }),
+      axios.get('http://127.0.0.1:8000/api/sedes', { headers })
+    ])
+    const salas = salasResponse.data
+    const usuarios = usuariosResponse.data.data || usuariosResponse.data
+    const juzgados = juzgadosResponse.data
+    const sedes = sedesResponse.data
+    // Enriquecer reservas
+    const reservasEnriquecidas = reservas.map(r => {
+      const usuario = usuarios.find(u => u.id === r.id_usuario) || {}
+      const sala = salas.find(s => s.id === r.id_sala) || {}
+      const juzgado = usuario.id_juzgado ? juzgados.find(j => j.id_juzgado === usuario.id_juzgado) : null
+      const sede = usuario.id_sede ? sedes.find(s => s.id_sede === usuario.id_sede) : null
+      return {
+        ...r,
+        usuario,
+        sala,
+        juzgado: juzgado || { nom_juzgado: 'Sin juzgado' },
+        sede: sede || { nom_sede: 'Sin sede' }
+      }
+    })
+    // Calcular resumen
+    const resumen = {
+      pendientes: reservasEnriquecidas.filter(r => r.estado === 'pendiente').length,
+      confirmadas: reservasEnriquecidas.filter(r => r.estado === 'confirmada').length,
+      canceladas: reservasEnriquecidas.filter(r => r.estado === 'cancelada').length
+    }
+    datosReporte.value = {
+      total_reservas: reservasEnriquecidas.length,
+      resumen,
+      data: reservasEnriquecidas
+    }
+    ElMessage.success(`Se encontraron ${reservasEnriquecidas.length} reservas`)
   } catch (error) {
     console.error('Error al generar reporte:', error)
     ElMessage.error('Error al generar el reporte')
@@ -176,8 +211,89 @@ const exportarExcel = () => {
   ElMessage.info('Función de exportación a Excel en desarrollo')
 }
 
-const exportarPDF = () => {
-  ElMessage.info('Función de exportación a PDF en desarrollo')
+const exportarPDF = async () => {
+  try {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const azul = '#205493'
+    const azulRGB = [32, 84, 147]
+    const blanco = '#FFFFFF'
+    const gris = '#F5F6FA'
+    
+    doc.setFillColor(azul)
+    doc.rect(0, 0, pageWidth, 120, 'F')
+    
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(26)
+    doc.setTextColor(255,255,255)
+    doc.text('Reporte Listado de Reservas por Estado', pageWidth/2, 60, { align: 'center' })
+    
+    doc.setFillColor(azul)
+    doc.rect(0, 120, pageWidth, 30, 'F')
+    doc.setFontSize(14)
+    doc.setTextColor(255,255,255)
+    doc.text('Sistema de Reservas y Prestamos de Salas de Audiencias', pageWidth/2, 140, { align: 'center' })
+    
+    doc.setFillColor(blanco)
+    doc.rect(0, 150, pageWidth, pageHeight-230, 'F')
+    
+    // Encabezados y datos de la tabla
+    const headers = [
+      'Fecha', 'Hora Inicio', 'Hora Fin', 'Sala', 'Usuario', 'Juzgado', 'Descripción', 'Estado'
+    ]
+    const data = (datosReporte.value?.data || []).map(row => [
+      formatDate(row.fecha),
+      row.hora_inicio,
+      row.hora_fin,
+      row.sala?.nom_sala || '',
+      `${row.usuario?.nombres || ''} ${row.usuario?.apellidos || ''}`,
+      row.juzgado?.nom_juzgado || '',
+      row.descripcion,
+      row.estado
+    ])
+    
+    autoTable(doc, {
+      head: [headers],
+      body: data,
+      startY: 170,
+      margin: { left: 30, right: 30 },
+      styles: {
+        fontSize: 10,
+        cellPadding: 4,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'center',
+        minCellHeight: 18
+      },
+      headStyles: {
+        fillColor: azulRGB,
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 11
+      },
+      alternateRowStyles: {
+        fillColor: gris
+      },
+      tableLineColor: azulRGB,
+      tableLineWidth: 0.5
+    })
+    
+    doc.setFillColor(azul)
+    doc.rect(0, pageHeight-80, pageWidth, 80, 'F')
+    
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(11)
+    doc.setTextColor(255,255,255)
+    doc.text('Rama Judicial - Seccional Cartagena Área de Sistemas', pageWidth/2, pageHeight-50, { align: 'center' })
+    doc.text('Calle del Cuartel, Cra 5 # 36-29 piso 2', pageWidth/2, pageHeight-30, { align: 'center' })
+    
+    doc.save(`Reporte_Listado_Reservas_Estado_${new Date().toISOString().split('T')[0]}.pdf`)
+    ElMessage.success('Archivo PDF exportado correctamente')
+  } catch (error) {
+    console.error('Error al exportar PDF:', error)
+    ElMessage.error('Error al exportar el archivo PDF: ' + error.message)
+  }
 }
 </script>
 
